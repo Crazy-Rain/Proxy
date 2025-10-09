@@ -9,6 +9,7 @@ The server comes with two example apps configured:
 ```json
 {
   "port": 3000,
+  "hostname": "localhost",
   "credentials": {
     "username": "admin",
     "password": "$2b$10$EwOIqMwzZ7V3UtD9HC6R8uFf91Py05XIcAw1fX/WKgU4dEA3hYdYS"
@@ -29,18 +30,41 @@ The server comes with two example apps configured:
 }
 ```
 
-## Adding Your Own Apps
+## Network Access
+
+The proxy server listens on `0.0.0.0:3000` by default, making it accessible from:
+- Localhost: `http://localhost:3000`
+- Same network: `http://<server-ip>:3000` (e.g., `http://192.168.1.100:3000`)
+- By hostname: `http://<hostname>:3000` (e.g., `http://myserver:3000`)
+
+## Managing Apps
+
+### Method 1: Through Web Interface (Recommended)
+
+1. Login and go to Settings
+2. Scroll to "Manage Apps" section
+3. Fill in the "Add New App" form:
+   - App Name: Display name for the app
+   - Port: Port number where the app runs
+   - Path: URL path to access the app (e.g., `/myapp`)
+4. Click "Add App"
+5. Restart the server for changes to take effect
+
+You can also edit or delete existing apps using the buttons next to each app.
+
+### Method 2: Edit config.json Manually
 
 Let's say you have the following applications running locally:
 - A web app on port 3001
 - An API server on port 5000
 - A development server on port 8000
 
-### Step 1: Edit config.json
+Edit `config.json`:
 
 ```json
 {
   "port": 3000,
+  "hostname": "localhost",
   "credentials": {
     "username": "admin",
     "password": "$2b$10$EwOIqMwzZ7V3UtD9HC6R8uFf91Py05XIcAw1fX/WKgU4dEA3hYdYS"
@@ -66,13 +90,13 @@ Let's say you have the following applications running locally:
 }
 ```
 
-### Step 2: Restart the Proxy Server
+Then restart the proxy server:
 
 ```bash
 npm start
 ```
 
-### Step 3: Access Your Apps
+### Accessing Your Apps
 
 Now you can access your apps through the proxy:
 - Web App: http://localhost:3000/webapp
@@ -80,6 +104,31 @@ Now you can access your apps through the proxy:
 - Dev Server: http://localhost:3000/dev
 
 All requests will be authenticated through the proxy login system.
+
+## Configuring Hostname
+
+The hostname setting determines where the proxy forwards requests. This is useful when:
+- Apps run on a different machine on your network
+- You want to use a device's network name instead of localhost
+
+### Through Web Interface
+
+1. Login and go to Settings
+2. In "Hostname Configuration" section, enter:
+   - Device hostname (e.g., `myserver`)
+   - IP address (e.g., `192.168.1.50`)
+   - Or keep `localhost` for local apps
+3. Click "Update Hostname"
+4. Restart the server
+
+Now apps will be accessed at `http://<hostname>:PORT` instead of `http://localhost:PORT`.
+
+### Example: Accessing Apps on Another Device
+
+If you have apps running on `192.168.1.50`:
+1. Set hostname to `192.168.1.50` in settings
+2. Add apps with their respective ports
+3. The proxy will forward to `http://192.168.1.50:PORT`
 
 ## Changing Default Password
 
@@ -176,6 +225,13 @@ Run multiple team member projects on the same server:
 - Charlie's app (port 3003) → /charlie
 
 Everyone accesses through a single authenticated proxy.
+
+### 4. Network Device Management
+
+Access apps running on different network devices:
+1. Set hostname to device IP (e.g., `192.168.1.100`)
+2. Add apps with their ports
+3. Access via proxy from any network device
 
 ## Security Notes
 
