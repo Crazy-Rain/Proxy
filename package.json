@@ -1,0 +1,20 @@
+{
+  "name": "hosted-proxy-server",
+  "version": "1.0.0",
+  "description": "A hosted proxy server with authentication and app management",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["proxy", "server", "authentication"],
+  "author": "",
+  "license": "GPL-2.0",
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "body-parser": "^1.20.2",
+    "http-proxy-middleware": "^2.0.6",
+    "bcrypt": "^5.1.1"
+  }
+}
