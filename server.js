@@ -6,8 +6,14 @@ const bcrypt = require('bcrypt');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const http = require('http');
+const socketIo = require('socket.io');
+const pty = require('node-pty');
+const os = require('os');
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
 const CONFIG_FILE = path.join(__dirname, 'config.json');
 
 // Load configuration
@@ -123,6 +129,7 @@ app.get('/logout', (req, res) => {
 app.get('/', requireAuth, (req, res) => {
   const appsList = config.apps.map(app => `
     <div class="app-card">
+      ${app.icon ? `<div class="app-icon">${app.icon}</div>` : ''}
       <h3>${app.name}</h3>
       <p>Port: ${app.port}</p>
       <a href="${app.path}" class="btn">Access App</a>
@@ -170,6 +177,11 @@ app.get('/', requireAuth, (req, res) => {
           margin-top: 0;
           color: #333;
         }
+        .app-icon {
+          font-size: 48px;
+          text-align: center;
+          margin-bottom: 10px;
+        }
         .btn {
           display: inline-block;
           padding: 10px 20px;
@@ -198,6 +210,7 @@ app.get('/', requireAuth, (req, res) => {
       <div class="header">
         <h1>Proxy Server Dashboard</h1>
         <div class="nav-buttons">
+          <a href="/terminal" class="btn btn-secondary">Terminal</a>
           <a href="/settings" class="btn btn-secondary">Settings</a>
           <a href="/logout" class="btn btn-secondary">Logout</a>
         </div>
@@ -399,6 +412,7 @@ app.get('/settings', requireAuth, (req, res) => {
           <h3>Add New App</h3>
           <form id="addAppForm">
             <input type="text" name="name" placeholder="App Name" required>
+            <input type="text" name="icon" placeholder="Icon (emoji or text, optional)">
             <input type="number" name="port" placeholder="Port" required min="1" max="65535">
             <input type="text" name="path" placeholder="Path (e.g., /myapp)" required pattern="^/[a-zA-Z0-9-_/]*$">
             <button type="submit">Add App</button>
@@ -410,11 +424,12 @@ app.get('/settings', requireAuth, (req, res) => {
             ${config.apps.map(app => `
               <div class="app-item" data-path="${app.path}">
                 <div class="app-info">
+                  ${app.icon ? `<span style="font-size: 24px; margin-right: 10px;">${app.icon}</span>` : ''}
                   <strong>${app.name}</strong><br>
                   <small>Port: ${app.port} | Path: ${app.path}</small>
                 </div>
                 <div class="app-actions">
-                  <button class="btn btn-small btn-secondary edit-app" data-path="${app.path}" data-name="${app.name}" data-port="${app.port}">Edit</button>
+                  <button class="btn btn-small btn-secondary edit-app" data-path="${app.path}" data-name="${app.name}" data-port="${app.port}" data-icon="${app.icon || ''}">Edit</button>
                   <button class="btn btn-small btn-danger delete-app" data-path="${app.path}">Delete</button>
                 </div>
               </div>
@@ -517,9 +532,12 @@ app.get('/settings', requireAuth, (req, res) => {
             const path = btn.dataset.path;
             const name = btn.dataset.name;
             const port = btn.dataset.port;
+            const icon = btn.dataset.icon;
             
             const newName = prompt('Enter new name:', name);
             if (!newName) return;
+            
+            const newIcon = prompt('Enter new icon (emoji or text, leave empty for none):', icon);
             
             const newPort = prompt('Enter new port:', port);
             if (!newPort) return;
@@ -531,7 +549,7 @@ app.get('/settings', requireAuth, (req, res) => {
               const response = await fetch('/api/apps/' + encodeURIComponent(path), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: newName, port: parseInt(newPort), path: newPath })
+                body: JSON.stringify({ name: newName, port: parseInt(newPort), path: newPath, icon: newIcon })
               });
               const result = await response.json();
               
@@ -654,6 +672,113 @@ app.get('/settings', requireAuth, (req, res) => {
             messageDiv.innerHTML = '<div class="message error">Error: ' + error.message + '</div>';
           }
         });
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/terminal', requireAuth, (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Proxy Server - Terminal</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 0;
+          padding: 0;
+          background: #f5f5f5;
+        }
+        .header {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .btn {
+          display: inline-block;
+          padding: 10px 20px;
+          background: #667eea;
+          color: white;
+          text-decoration: none;
+          border-radius: 5px;
+        }
+        .btn-secondary {
+          background: #6c757d;
+        }
+        .btn-secondary:hover {
+          background: #545b62;
+        }
+        .container {
+          max-width: 1200px;
+          margin: 20px auto;
+          padding: 20px;
+          background: white;
+          border-radius: 10px;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #terminal {
+          height: 600px;
+        }
+        .xterm {
+          height: 100%;
+        }
+        .xterm-viewport {
+          background-color: #1e1e1e;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>Terminal</h1>
+        <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+      </div>
+      <div class="container">
+        <p><strong>Note:</strong> Web terminal requires proper permissions. If it doesn't work, you may need to SSH into the device directly.</p>
+        <div id="terminal"></div>
+      </div>
+      
+      <script src="/socket.io/socket.io.js"></script>
+      <script>
+        // Simple terminal implementation using socket.io
+        const socket = io();
+        const terminalDiv = document.getElementById('terminal');
+        
+        // Create a simple terminal interface
+        const output = document.createElement('pre');
+        output.style.cssText = 'background: #1e1e1e; color: #d4d4d4; padding: 10px; margin: 0; font-family: monospace; height: 580px; overflow-y: auto;';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.style.cssText = 'width: 100%; padding: 10px; font-family: monospace; background: #2d2d2d; color: #d4d4d4; border: none; box-sizing: border-box;';
+        input.placeholder = 'Type command and press Enter...';
+        
+        terminalDiv.appendChild(output);
+        terminalDiv.appendChild(input);
+        
+        // Start terminal session
+        socket.emit('start-terminal');
+        
+        // Receive terminal output
+        socket.on('terminal-output', (data) => {
+          output.textContent += data;
+          output.scrollTop = output.scrollHeight;
+        });
+        
+        // Send terminal input
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            const cmd = input.value + '\\n';
+            socket.emit('terminal-input', cmd);
+            input.value = '';
+          }
+        });
+        
+        // Focus input
+        input.focus();
       </script>
     </body>
     </html>
@@ -792,7 +917,7 @@ app.post('/api/change-hostname', requireAuth, async (req, res) => {
 });
 
 app.post('/api/apps', requireAuth, async (req, res) => {
-  const { name, port, path } = req.body;
+  const { name, port, path, icon } = req.body;
   
   try {
     if (!name || !port || !path) {
@@ -804,7 +929,11 @@ app.post('/api/apps', requireAuth, async (req, res) => {
       return res.json({ success: false, error: 'Path already exists' });
     }
     
-    config.apps.push({ name, port: parseInt(port), path });
+    const newApp = { name, port: parseInt(port), path };
+    if (icon) {
+      newApp.icon = icon;
+    }
+    config.apps.push(newApp);
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
     
     res.json({ success: true, message: 'App added. Please restart the server for changes to take effect.' });
@@ -815,7 +944,7 @@ app.post('/api/apps', requireAuth, async (req, res) => {
 
 app.put('/api/apps/:path', requireAuth, async (req, res) => {
   const oldPath = decodeURIComponent(req.params.path);
-  const { name, port, path: newPath } = req.body;
+  const { name, port, path: newPath, icon } = req.body;
   
   try {
     const appIndex = config.apps.findIndex(app => app.path === oldPath);
@@ -829,7 +958,11 @@ app.put('/api/apps/:path', requireAuth, async (req, res) => {
       return res.json({ success: false, error: 'Path already exists' });
     }
     
-    config.apps[appIndex] = { name, port: parseInt(port), path: newPath };
+    const updatedApp = { name, port: parseInt(port), path: newPath };
+    if (icon) {
+      updatedApp.icon = icon;
+    }
+    config.apps[appIndex] = updatedApp;
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
     
     res.json({ success: true, message: 'App updated. Please restart the server for changes to take effect.' });
@@ -864,7 +997,7 @@ app.get('/api/apps', requireAuth, async (req, res) => {
 // Setup proxy for each app
 config.apps.forEach(appConfig => {
   app.use(appConfig.path, requireAuth, createProxyMiddleware({
-    target: `http://${config.hostname || 'localhost'}:${appConfig.port}`,
+    target: `http://localhost:${appConfig.port}`,
     changeOrigin: true,
     pathRewrite: {
       [`^${appConfig.path}`]: '',
@@ -872,9 +1005,52 @@ config.apps.forEach(appConfig => {
   }));
 });
 
+// Terminal socket.io setup
+io.on('connection', (socket) => {
+  let ptyProcess = null;
+
+  socket.on('start-terminal', () => {
+    if (ptyProcess) {
+      return;
+    }
+
+    const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+    ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 30,
+      cwd: process.env.HOME || process.env.USERPROFILE,
+      env: process.env
+    });
+
+    ptyProcess.on('data', (data) => {
+      socket.emit('terminal-output', data);
+    });
+
+    socket.on('terminal-input', (data) => {
+      if (ptyProcess) {
+        ptyProcess.write(data);
+      }
+    });
+
+    socket.on('terminal-resize', (size) => {
+      if (ptyProcess) {
+        ptyProcess.resize(size.cols, size.rows);
+      }
+    });
+  });
+
+  socket.on('disconnect', () => {
+    if (ptyProcess) {
+      ptyProcess.kill();
+      ptyProcess = null;
+    }
+  });
+});
+
 // Start server
 const PORT = config.port || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy server running on http://0.0.0.0:${PORT}`);
   console.log(`Accessible on network via http://<hostname>:${PORT}`);
   console.log(`Default credentials: username='admin', password='admin'`);
