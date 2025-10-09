@@ -684,7 +684,6 @@ app.get('/terminal', requireAuth, (req, res) => {
     <html>
     <head>
       <title>Proxy Server - Terminal</title>
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/css/xterm.css" />
       <style>
         body {
           font-family: Arial, sans-serif;
@@ -725,6 +724,12 @@ app.get('/terminal', requireAuth, (req, res) => {
         #terminal {
           height: 600px;
         }
+        .xterm {
+          height: 100%;
+        }
+        .xterm-viewport {
+          background-color: #1e1e1e;
+        }
       </style>
     </head>
     <body>
@@ -733,50 +738,47 @@ app.get('/terminal', requireAuth, (req, res) => {
         <a href="/" class="btn btn-secondary">Back to Dashboard</a>
       </div>
       <div class="container">
+        <p><strong>Note:</strong> Web terminal requires proper permissions. If it doesn't work, you may need to SSH into the device directly.</p>
         <div id="terminal"></div>
       </div>
       
-      <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/lib/xterm.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.8.0/lib/addon-fit.js"></script>
+      <script src="/socket.io/socket.io.js"></script>
       <script>
+        // Simple terminal implementation using socket.io
         const socket = io();
-        const term = new Terminal({
-          cursorBlink: true,
-          fontSize: 14,
-          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-          theme: {
-            background: '#1e1e1e',
-            foreground: '#d4d4d4'
-          }
-        });
+        const terminalDiv = document.getElementById('terminal');
         
-        const fitAddon = new FitAddon.FitAddon();
-        term.loadAddon(fitAddon);
-        term.open(document.getElementById('terminal'));
-        fitAddon.fit();
+        // Create a simple terminal interface
+        const output = document.createElement('pre');
+        output.style.cssText = 'background: #1e1e1e; color: #d4d4d4; padding: 10px; margin: 0; font-family: monospace; height: 580px; overflow-y: auto;';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.style.cssText = 'width: 100%; padding: 10px; font-family: monospace; background: #2d2d2d; color: #d4d4d4; border: none; box-sizing: border-box;';
+        input.placeholder = 'Type command and press Enter...';
+        
+        terminalDiv.appendChild(output);
+        terminalDiv.appendChild(input);
         
         // Start terminal session
         socket.emit('start-terminal');
         
-        // Send terminal input to server
-        term.onData((data) => {
-          socket.emit('terminal-input', data);
-        });
-        
-        // Receive terminal output from server
+        // Receive terminal output
         socket.on('terminal-output', (data) => {
-          term.write(data);
+          output.textContent += data;
+          output.scrollTop = output.scrollHeight;
         });
         
-        // Handle resize
-        window.addEventListener('resize', () => {
-          fitAddon.fit();
-          socket.emit('terminal-resize', {
-            cols: term.cols,
-            rows: term.rows
-          });
+        // Send terminal input
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            const cmd = input.value + '\\n';
+            socket.emit('terminal-input', cmd);
+            input.value = '';
+          }
         });
+        
+        // Focus input
+        input.focus();
       </script>
     </body>
     </html>
