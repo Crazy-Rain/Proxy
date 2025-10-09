@@ -1,5 +1,6 @@
 {
   "port": 3000,
+  "hostname": "localhost",
   "credentials": {
     "username": "admin",
     "password": "$2b$10$EwOIqMwzZ7V3UtD9HC6R8uFf91Py05XIcAw1fX/WKgU4dEA3hYdYS"
