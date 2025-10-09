@@ -88,6 +88,10 @@ app.get('/login', (req, res) => {
           height: 100vh;
           margin: 0;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          transition: background 0.3s ease;
+        }
+        body.dark-mode {
+          background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
         }
         .login-container {
           background: white;
@@ -95,11 +99,20 @@ app.get('/login', (req, res) => {
           border-radius: 10px;
           box-shadow: 0 10px 25px rgba(0,0,0,0.2);
           width: 300px;
+          transition: background 0.3s ease, color 0.3s ease;
+        }
+        body.dark-mode .login-container {
+          background: #2d2d3a;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
         h2 {
           margin-top: 0;
           color: #333;
           text-align: center;
+          transition: color 0.3s ease;
+        }
+        body.dark-mode h2 {
+          color: #e0e0e0;
         }
         input {
           width: 100%;
@@ -108,6 +121,12 @@ app.get('/login', (req, res) => {
           border: 1px solid #ddd;
           border-radius: 5px;
           box-sizing: border-box;
+          transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        body.dark-mode input {
+          background: #1a1a2e;
+          border-color: #444;
+          color: #e0e0e0;
         }
         button {
           width: 100%;
@@ -127,9 +146,38 @@ app.get('/login', (req, res) => {
           font-size: 14px;
           margin-top: 10px;
         }
+        body.dark-mode .error {
+          color: #ff6b6b;
+        }
+        .dark-mode-toggle {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          background: rgba(255,255,255,0.2);
+          border: none;
+          border-radius: 50%;
+          width: 50px;
+          height: 50px;
+          cursor: pointer;
+          font-size: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.3s ease;
+        }
+        .dark-mode-toggle:hover {
+          background: rgba(255,255,255,0.3);
+        }
+        body.dark-mode .dark-mode-toggle {
+          background: rgba(255,255,255,0.1);
+        }
+        body.dark-mode .dark-mode-toggle:hover {
+          background: rgba(255,255,255,0.2);
+        }
       </style>
     </head>
     <body>
+      <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">🌙</button>
       <div class="login-container">
         <h2>Proxy Server Login</h2>
         <form method="POST" action="/login">
@@ -139,6 +187,21 @@ app.get('/login', (req, res) => {
           ${req.query.error ? '<div class="error">Invalid credentials</div>' : ''}
         </form>
       </div>
+      <script>
+        // Dark mode functionality
+        function toggleDarkMode() {
+          document.body.classList.toggle('dark-mode');
+          const isDark = document.body.classList.contains('dark-mode');
+          localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+          document.querySelector('.dark-mode-toggle').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'enabled') {
+          document.body.classList.add('dark-mode');
+          document.querySelector('.dark-mode-toggle').textContent = '☀️';
+        }
+      </script>
     </body>
     </html>
   `);
@@ -182,6 +245,10 @@ app.get('/', requireAuth, (req, res) => {
           margin: 0;
           padding: 0;
           background: #f5f5f5;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode {
+          background: #1a1a2e;
         }
         .header {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -190,6 +257,10 @@ app.get('/', requireAuth, (req, res) => {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode .header {
+          background: linear-gradient(135deg, #2d2d3a 0%, #1a1a2e 100%);
         }
         .container {
           max-width: 1200px;
@@ -207,10 +278,25 @@ app.get('/', requireAuth, (req, res) => {
           padding: 20px;
           border-radius: 10px;
           box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+          transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        body.dark-mode .app-card {
+          background: #2d2d3a;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
         .app-card h3 {
           margin-top: 0;
           color: #333;
+          transition: color 0.3s ease;
+        }
+        body.dark-mode .app-card h3 {
+          color: #e0e0e0;
+        }
+        .app-card p {
+          transition: color 0.3s ease;
+        }
+        body.dark-mode .app-card p {
+          color: #b0b0b0;
         }
         .app-icon {
           font-size: 48px;
@@ -238,6 +324,23 @@ app.get('/', requireAuth, (req, res) => {
         .nav-buttons {
           display: flex;
           gap: 10px;
+          align-items: center;
+        }
+        .dark-mode-toggle {
+          background: rgba(255,255,255,0.2);
+          border: none;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          cursor: pointer;
+          font-size: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.3s ease;
+        }
+        .dark-mode-toggle:hover {
+          background: rgba(255,255,255,0.3);
         }
       </style>
     </head>
@@ -245,6 +348,7 @@ app.get('/', requireAuth, (req, res) => {
       <div class="header">
         <h1>Proxy Server Dashboard</h1>
         <div class="nav-buttons">
+          <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">🌙</button>
           <a href="/terminal" class="btn btn-secondary">Terminal</a>
           <a href="/settings" class="btn btn-secondary">Settings</a>
           <a href="/logout" class="btn btn-secondary">Logout</a>
@@ -256,6 +360,21 @@ app.get('/', requireAuth, (req, res) => {
           ${appsList}
         </div>
       </div>
+      <script>
+        // Dark mode functionality
+        function toggleDarkMode() {
+          document.body.classList.toggle('dark-mode');
+          const isDark = document.body.classList.contains('dark-mode');
+          localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+          document.querySelector('.dark-mode-toggle').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'enabled') {
+          document.body.classList.add('dark-mode');
+          document.querySelector('.dark-mode-toggle').textContent = '☀️';
+        }
+      </script>
     </body>
     </html>
   `);
@@ -273,6 +392,10 @@ app.get('/settings', requireAuth, (req, res) => {
           margin: 0;
           padding: 0;
           background: #f5f5f5;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode {
+          background: #1a1a2e;
         }
         .header {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -281,6 +404,10 @@ app.get('/settings', requireAuth, (req, res) => {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode .header {
+          background: linear-gradient(135deg, #2d2d3a 0%, #1a1a2e 100%);
         }
         .container {
           max-width: 1200px;
@@ -293,6 +420,29 @@ app.get('/settings', requireAuth, (req, res) => {
           border-radius: 10px;
           box-shadow: 0 2px 5px rgba(0,0,0,0.1);
           margin-bottom: 20px;
+          transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        body.dark-mode .settings-section {
+          background: #2d2d3a;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .settings-section h2,
+        .settings-section h3 {
+          transition: color 0.3s ease;
+        }
+        body.dark-mode .settings-section h2,
+        body.dark-mode .settings-section h3 {
+          color: #e0e0e0;
+        }
+        .settings-section p,
+        .settings-section label,
+        .settings-section small {
+          transition: color 0.3s ease;
+        }
+        body.dark-mode .settings-section p,
+        body.dark-mode .settings-section label,
+        body.dark-mode .settings-section small {
+          color: #b0b0b0;
         }
         input, select {
           width: 100%;
@@ -301,6 +451,13 @@ app.get('/settings', requireAuth, (req, res) => {
           border: 1px solid #ddd;
           border-radius: 5px;
           box-sizing: border-box;
+          transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        body.dark-mode input,
+        body.dark-mode select {
+          background: #1a1a2e;
+          border-color: #444;
+          color: #e0e0e0;
         }
         button, .btn {
           display: inline-block;
@@ -390,6 +547,14 @@ app.get('/settings', requireAuth, (req, res) => {
           background: #f8d7da;
           color: #721c24;
         }
+        body.dark-mode .success {
+          background: #1e4620;
+          color: #a3d9a5;
+        }
+        body.dark-mode .error {
+          background: #5a1f1f;
+          color: #ff9999;
+        }
         .app-list {
           margin-top: 20px;
         }
@@ -401,9 +566,23 @@ app.get('/settings', requireAuth, (req, res) => {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode .app-item {
+          background: #1a1a2e;
         }
         .app-info {
           flex: 1;
+          transition: color 0.3s ease;
+        }
+        body.dark-mode .app-info {
+          color: #e0e0e0;
+        }
+        body.dark-mode .app-info strong {
+          color: #e0e0e0;
+        }
+        body.dark-mode .app-info small {
+          color: #b0b0b0;
         }
         .app-actions {
           display: flex;
@@ -419,12 +598,33 @@ app.get('/settings', requireAuth, (req, res) => {
             grid-template-columns: 1fr;
           }
         }
+        .dark-mode-toggle {
+          background: rgba(255,255,255,0.2);
+          border: none;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          cursor: pointer;
+          font-size: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.3s ease;
+          padding: 0;
+          margin-right: 10px;
+        }
+        .dark-mode-toggle:hover {
+          background: rgba(255,255,255,0.3);
+        }
       </style>
     </head>
     <body>
       <div class="header">
         <h1>Settings</h1>
-        <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">🌙</button>
+          <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
       </div>
       <div class="container">
         <div class="settings-section">
@@ -749,6 +949,20 @@ app.get('/settings', requireAuth, (req, res) => {
             messageDiv.innerHTML = '<div class="message error">Error: ' + error.message + '</div>';
           }
         });
+
+        // Dark mode functionality
+        function toggleDarkMode() {
+          document.body.classList.toggle('dark-mode');
+          const isDark = document.body.classList.contains('dark-mode');
+          localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+          document.querySelector('.dark-mode-toggle').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'enabled') {
+          document.body.classList.add('dark-mode');
+          document.querySelector('.dark-mode-toggle').textContent = '☀️';
+        }
       </script>
     </body>
     </html>
@@ -767,6 +981,10 @@ app.get('/terminal', requireAuth, (req, res) => {
           margin: 0;
           padding: 0;
           background: #f5f5f5;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode {
+          background: #1a1a2e;
         }
         .header {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -775,6 +993,10 @@ app.get('/terminal', requireAuth, (req, res) => {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode .header {
+          background: linear-gradient(135deg, #2d2d3a 0%, #1a1a2e 100%);
         }
         .btn {
           display: inline-block;
@@ -797,6 +1019,17 @@ app.get('/terminal', requireAuth, (req, res) => {
           background: white;
           border-radius: 10px;
           box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+          transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        body.dark-mode .container {
+          background: #2d2d3a;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .container p {
+          transition: color 0.3s ease;
+        }
+        body.dark-mode .container p {
+          color: #b0b0b0;
         }
         #terminal {
           height: 600px;
@@ -807,12 +1040,33 @@ app.get('/terminal', requireAuth, (req, res) => {
         .xterm-viewport {
           background-color: #1e1e1e;
         }
+        .dark-mode-toggle {
+          background: rgba(255,255,255,0.2);
+          border: none;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          cursor: pointer;
+          font-size: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.3s ease;
+          padding: 0;
+          margin-right: 10px;
+        }
+        .dark-mode-toggle:hover {
+          background: rgba(255,255,255,0.3);
+        }
       </style>
     </head>
     <body>
       <div class="header">
         <h1>Terminal</h1>
-        <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">🌙</button>
+          <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
       </div>
       <div class="container">
         <p><strong>Note:</strong> Web terminal requires proper permissions. If it doesn't work, you may need to SSH into the device directly.</p>
@@ -821,6 +1075,20 @@ app.get('/terminal', requireAuth, (req, res) => {
       
       <script src="/socket.io/socket.io.js"></script>
       <script>
+        // Dark mode functionality
+        function toggleDarkMode() {
+          document.body.classList.toggle('dark-mode');
+          const isDark = document.body.classList.contains('dark-mode');
+          localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+          document.querySelector('.dark-mode-toggle').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'enabled') {
+          document.body.classList.add('dark-mode');
+          document.querySelector('.dark-mode-toggle').textContent = '☀️';
+        }
+        
         // Simple terminal implementation using socket.io
         const socket = io();
         const terminalDiv = document.getElementById('terminal');
@@ -1088,7 +1356,7 @@ app.post('/api/upload-icon', requireAuth, upload.single('icon'), (req, res) => {
 // Setup proxy for each app
 config.apps.forEach(appConfig => {
   app.use(appConfig.path, requireAuth, createProxyMiddleware({
-    target: `http://localhost:${appConfig.port}`,
+    target: `http://${config.hostname || 'localhost'}:${appConfig.port}`,
     changeOrigin: true,
     pathRewrite: {
       [`^${appConfig.path}`]: '',
@@ -1111,17 +1379,17 @@ config.apps.forEach(appConfig => {
             <body>
               <div class="error-container">
                 <h1>Proxy Error</h1>
-                <p>Unable to connect to the application at <strong>localhost:${appConfig.port}</strong></p>
+                <p>Unable to connect to the application at <strong>${config.hostname || 'localhost'}:${appConfig.port}</strong></p>
                 <div class="details">
                   <strong>Error:</strong> ${err.message}<br>
-                  <strong>Target:</strong> http://localhost:${appConfig.port}<br>
+                  <strong>Target:</strong> http://${config.hostname || 'localhost'}:${appConfig.port}<br>
                   <strong>Path:</strong> ${appConfig.path}
                 </div>
                 <p>Please ensure:</p>
                 <ul>
-                  <li>The application is running on port ${appConfig.port}</li>
+                  <li>The application is running on port ${appConfig.port} on ${config.hostname || 'localhost'}</li>
                   <li>The port number is correct in the configuration</li>
-                  <li>The application is accessible from localhost</li>
+                  <li>The application is accessible from ${config.hostname || 'localhost'}</li>
                 </ul>
                 <a href="/" class="btn">Back to Dashboard</a>
               </div>
