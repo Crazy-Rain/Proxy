@@ -10,18 +10,53 @@ const http = require('http');
 const socketIo = require('socket.io');
 const pty = require('node-pty');
 const os = require('os');
+const multer = require('multer');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 const CONFIG_FILE = path.join(__dirname, 'config.json');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 // Load configuration
 let config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
 
+// Create uploads directory if it doesn't exist
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'icon-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|svg/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
+});
+
 // Middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use('/uploads', express.static(UPLOADS_DIR));
 app.use(session({
   secret: 'proxy-secret-key',
   resave: false,
@@ -129,7 +164,7 @@ app.get('/logout', (req, res) => {
 app.get('/', requireAuth, (req, res) => {
   const appsList = config.apps.map(app => `
     <div class="app-card">
-      ${app.icon ? `<div class="app-icon">${app.icon}</div>` : ''}
+      ${app.icon ? (app.icon.startsWith('/uploads/') ? `<div class="app-icon"><img src="${app.icon}" alt="App icon" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px;"></div>` : `<div class="app-icon">${app.icon}</div>`) : ''}
       <h3>${app.name}</h3>
       <p>Port: ${app.port}</p>
       <a href="${app.path}" class="btn">Access App</a>
@@ -412,7 +447,15 @@ app.get('/settings', requireAuth, (req, res) => {
           <h3>Add New App</h3>
           <form id="addAppForm">
             <input type="text" name="name" placeholder="App Name" required>
-            <input type="text" name="icon" placeholder="Icon (emoji or text, optional)">
+            <div style="margin: 10px 0;">
+              <label style="display: block; margin-bottom: 5px; font-weight: bold;">Icon:</label>
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" name="icon" id="iconInput" placeholder="Emoji or text (optional)" style="flex: 1;">
+                <button type="button" id="uploadIconBtn" class="btn btn-secondary" style="white-space: nowrap;">Browse Image</button>
+              </div>
+              <input type="file" id="iconFileInput" accept="image/*" style="display: none;">
+              <div id="iconPreview" style="margin-top: 10px;"></div>
+            </div>
             <input type="number" name="port" placeholder="Port" required min="1" max="65535">
             <input type="text" name="path" placeholder="Path (e.g., /myapp)" required pattern="^/[a-zA-Z0-9-_/]*$">
             <button type="submit">Add App</button>
@@ -424,7 +467,7 @@ app.get('/settings', requireAuth, (req, res) => {
             ${config.apps.map(app => `
               <div class="app-item" data-path="${app.path}">
                 <div class="app-info">
-                  ${app.icon ? `<span style="font-size: 24px; margin-right: 10px;">${app.icon}</span>` : ''}
+                  ${app.icon ? (app.icon.startsWith('/uploads/') ? `<img src="${app.icon}" alt="icon" style="width: 32px; height: 32px; object-fit: cover; border-radius: 4px; margin-right: 10px; vertical-align: middle;">` : `<span style="font-size: 24px; margin-right: 10px;">${app.icon}</span>`) : ''}
                   <strong>${app.name}</strong><br>
                   <small>Port: ${app.port} | Path: ${app.path}</small>
                 </div>
@@ -474,6 +517,40 @@ app.get('/settings', requireAuth, (req, res) => {
       </div>
 
       <script>
+        // Icon upload functionality
+        let uploadedIconPath = null;
+        
+        document.getElementById('uploadIconBtn').addEventListener('click', () => {
+          document.getElementById('iconFileInput').click();
+        });
+        
+        document.getElementById('iconFileInput').addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          
+          const formData = new FormData();
+          formData.append('icon', file);
+          
+          try {
+            const response = await fetch('/api/upload-icon', {
+              method: 'POST',
+              body: formData
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+              uploadedIconPath = result.iconPath;
+              document.getElementById('iconInput').value = result.iconPath;
+              document.getElementById('iconPreview').innerHTML = 
+                '<img src="' + result.iconPath + '" alt="Preview" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 2px solid #667eea;">';
+            } else {
+              alert('Upload failed: ' + result.error);
+            }
+          } catch (error) {
+            alert('Error uploading file: ' + error.message);
+          }
+        });
+      
         // Handle hostname change
         document.getElementById('hostnameForm').addEventListener('submit', async (e) => {
           e.preventDefault();
@@ -994,6 +1071,20 @@ app.get('/api/apps', requireAuth, async (req, res) => {
   res.json({ apps: config.apps, hostname: config.hostname || 'localhost' });
 });
 
+// File upload endpoint for icons
+app.post('/api/upload-icon', requireAuth, upload.single('icon'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    
+    const iconPath = `/uploads/${req.file.filename}`;
+    res.json({ success: true, iconPath: iconPath });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Setup proxy for each app
 config.apps.forEach(appConfig => {
   app.use(appConfig.path, requireAuth, createProxyMiddleware({
@@ -1001,6 +1092,43 @@ config.apps.forEach(appConfig => {
     changeOrigin: true,
     pathRewrite: {
       [`^${appConfig.path}`]: '',
+    },
+    on: {
+      error: (err, req, res) => {
+        console.error(`Proxy error for ${appConfig.path}:`, err.message);
+        res.status(500).send(`
+          <html>
+            <head>
+              <title>Proxy Error</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 40px; background: #f5f5f5; }
+                .error-container { background: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: 0 auto; }
+                h1 { color: #dc3545; }
+                .details { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; font-family: monospace; }
+                .btn { display: inline-block; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+              </style>
+            </head>
+            <body>
+              <div class="error-container">
+                <h1>Proxy Error</h1>
+                <p>Unable to connect to the application at <strong>localhost:${appConfig.port}</strong></p>
+                <div class="details">
+                  <strong>Error:</strong> ${err.message}<br>
+                  <strong>Target:</strong> http://localhost:${appConfig.port}<br>
+                  <strong>Path:</strong> ${appConfig.path}
+                </div>
+                <p>Please ensure:</p>
+                <ul>
+                  <li>The application is running on port ${appConfig.port}</li>
+                  <li>The port number is correct in the configuration</li>
+                  <li>The application is accessible from localhost</li>
+                </ul>
+                <a href="/" class="btn">Back to Dashboard</a>
+              </div>
+            </body>
+          </html>
+        `);
+      },
     },
   }));
 });
@@ -1015,12 +1143,16 @@ io.on('connection', (socket) => {
     }
 
     const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+    const env = { ...process.env };
+    // Disable bracketed paste mode and other interactive features
+    env.TERM = 'dumb';
+    
     ptyProcess = pty.spawn(shell, [], {
-      name: 'xterm-color',
+      name: 'dumb',
       cols: 80,
       rows: 30,
       cwd: process.env.HOME || process.env.USERPROFILE,
-      env: process.env
+      env: env
     });
 
     ptyProcess.on('data', (data) => {
