@@ -1,0 +1,20 @@
+{
+  "port": 3000,
+  "credentials": {
+    "username": "admin",
+    "password": "$2b$10$EwOIqMwzZ7V3UtD9HC6R8uFf91Py05XIcAw1fX/WKgU4dEA3hYdYS"
+  },
+  "runOnStartup": false,
+  "apps": [
+    {
+      "name": "Example App 1",
+      "port": 8080,
+      "path": "/app1"
+    },
+    {
+      "name": "Example App 2",
+      "port": 8081,
+      "path": "/app2"
+    }
+  ]
+}
