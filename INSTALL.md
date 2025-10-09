@@ -30,39 +30,37 @@ The server will be available at:
 - Localhost: `http://localhost:3000`
 - Network: `http://<server-ip>:3000` (accessible from other devices on the same network)
 
-### 4. Setup Run on Startup (Ubuntu Noble ARM64)
+### 4. Setup Run on Startup (systemd user service)
 
-To enable the proxy server to run on system startup:
+The proxy server can automatically start when you log in using systemd user services. **No sudo required!**
 
-1. Copy the service file to systemd directory:
+#### Option 1: Enable via Web Interface (Recommended)
+
+1. Navigate to Settings in the web interface
+2. Toggle the "Run on Startup" switch
+3. The service will be automatically configured and enabled
+4. It will start automatically on your next login
+
+#### Option 2: Manual Setup
+
+If you prefer to set it up manually:
+
 ```bash
-sudo cp proxy-server.service /etc/systemd/system/
-```
+# The service file is automatically created when you toggle the switch in Settings
+# Or you can check the status manually:
+systemctl --user status proxy-server.service
 
-2. Update the service file with your actual paths:
-```bash
-sudo nano /etc/systemd/system/proxy-server.service
-```
-Update the `User`, `WorkingDirectory`, and `ExecStart` paths to match your installation.
+# To enable manually (if needed):
+systemctl --user enable proxy-server.service
 
-3. Reload systemd:
-```bash
-sudo systemctl daemon-reload
-```
+# To disable manually:
+systemctl --user disable proxy-server.service
 
-4. You can now enable/disable the service from the web interface Settings page, or manually:
-```bash
-# Enable
-sudo systemctl enable proxy-server.service
+# To start the service immediately:
+systemctl --user start proxy-server.service
 
-# Disable
-sudo systemctl disable proxy-server.service
-
-# Start the service
-sudo systemctl start proxy-server.service
-
-# Check status
-sudo systemctl status proxy-server.service
+# To check status:
+systemctl --user status proxy-server.service
 ```
 
 ## Usage
@@ -73,7 +71,7 @@ sudo systemctl status proxy-server.service
 4. Go to Settings to:
    - Configure hostname for accessing apps on network devices
    - Add, edit, or delete applications
-   - Toggle "Run on Startup" for Ubuntu Noble ARM64
+   - Toggle "Run on Startup" (uses systemd user service, no sudo required)
    - Change your password
    - Change your username
 

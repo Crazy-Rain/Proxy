@@ -7,7 +7,7 @@ A hosted proxy server with authentication and application management.
 - **Application Management**: Add, edit, and delete apps through the web interface
 - **Network Accessibility**: Access from any device on the same network
 - **Hostname Configuration**: Configure the hostname for app targets (use device name or IP)
-- **Run on Startup**: Toggle to enable/disable automatic startup on Ubuntu Noble ARM64
+- **Run on Startup**: Toggle to enable/disable automatic startup (systemd user service, no sudo required)
 - **Configurable Credentials**: Change username and password from the web interface
 - **Configuration File**: Settings persisted in JSON format
 

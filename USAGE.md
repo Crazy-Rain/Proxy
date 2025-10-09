@@ -159,47 +159,54 @@ Copy the output hash and replace it in `config.json`:
 }
 ```
 
-## Ubuntu Systemd Service Setup
+## Systemd User Service Setup (Run on Startup)
 
-### Quick Setup
+The proxy server can automatically start when you log in using systemd user services. **No sudo required!**
 
-1. Copy the service file:
+### Quick Setup via Web Interface (Recommended)
+
+1. Login to the proxy server web interface
+2. Navigate to Settings
+3. Toggle the "Run on Startup" switch
+4. The service will be automatically configured and enabled
+5. It will start automatically on your next login
+
+### Manual Setup (Alternative)
+
+If you prefer manual setup or need to troubleshoot:
+
 ```bash
-sudo cp proxy-server.service /etc/systemd/system/
-```
+# Check service status
+systemctl --user status proxy-server.service
 
-2. Edit the service file with your paths:
-```bash
-sudo nano /etc/systemd/system/proxy-server.service
-```
+# Enable the service (if not done via web interface)
+systemctl --user enable proxy-server.service
 
-Update:
-- `User=` to your username
-- `WorkingDirectory=` to your installation path
-- `ExecStart=` to your node binary and server.js paths
+# Start the service immediately
+systemctl --user start proxy-server.service
 
-3. Reload systemd:
-```bash
-sudo systemctl daemon-reload
-```
-
-4. Enable via web interface or command line:
-```bash
-sudo systemctl enable proxy-server.service
-sudo systemctl start proxy-server.service
+# Disable the service
+systemctl --user disable proxy-server.service
 ```
 
 ### Verify Service Status
 
 ```bash
-systemctl status proxy-server.service
+systemctl --user status proxy-server.service
 ```
 
 ### View Logs
 
 ```bash
-journalctl -u proxy-server.service -f
+journalctl --user -u proxy-server.service -f
 ```
+
+### How It Works
+
+- The web interface automatically creates a user-level systemd service file at `~/.config/systemd/user/proxy-server.service`
+- The service runs under your user account (no sudo needed)
+- It starts automatically when you log in
+- No manual path configuration required
 
 ## Use Cases
 

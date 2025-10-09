@@ -1,0 +1,19 @@
+# Note: This is a reference/example file only.
+# The actual service file is automatically created at ~/.config/systemd/user/proxy-server.service
+# when you enable "Run on Startup" in the web interface.
+#
+# If you want to manually create the service, you can use this as a template:
+
+[Unit]
+Description=Hosted Proxy Server (User Service)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Proxy
+ExecStart=/usr/bin/node %h/Proxy/server.js
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

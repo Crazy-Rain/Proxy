@@ -424,13 +424,13 @@ app.get('/settings', requireAuth, (req, res) => {
 
         <div class="two-column">
           <div class="settings-section">
-            <h2>Run on Startup (Ubuntu Noble ARM64)</h2>
+            <h2>Run on Startup</h2>
             <div class="toggle-container">
               <label class="toggle">
                 <input type="checkbox" id="startupToggle" ${config.runOnStartup ? 'checked' : ''}>
                 <span class="slider"></span>
               </label>
-              <span>Enable automatic startup on system boot</span>
+              <span>Enable automatic startup on system boot (systemd user service)</span>
             </div>
             <div id="startupMessage"></div>
           </div>
@@ -586,7 +586,8 @@ app.get('/settings', requireAuth, (req, res) => {
             const data = await response.json();
             
             if (data.success) {
-              messageDiv.innerHTML = '<div class="message success">Startup setting updated successfully</div>';
+              const msg = data.message || 'Startup setting updated successfully';
+              messageDiv.innerHTML = '<div class="message success">' + msg + '</div>';
             } else {
               messageDiv.innerHTML = '<div class="message error">Failed to update: ' + data.error + '</div>';
               e.target.checked = !enabled; // Revert toggle
@@ -667,25 +668,70 @@ app.post('/api/startup', requireAuth, async (req, res) => {
     config.runOnStartup = enabled;
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
     
-    const servicePath = '/etc/systemd/system/proxy-server.service';
+    const os = require('os');
+    const userServiceDir = path.join(os.homedir(), '.config', 'systemd', 'user');
+    const serviceName = 'proxy-server.service';
+    const serviceFile = path.join(userServiceDir, serviceName);
+    
+    // Create user systemd directory if it doesn't exist
+    if (!fs.existsSync(userServiceDir)) {
+      fs.mkdirSync(userServiceDir, { recursive: true });
+    }
     
     if (enabled) {
-      // Enable the service
-      exec('sudo systemctl enable proxy-server.service', (error, stdout, stderr) => {
-        if (error) {
-          console.error('Error enabling service:', error);
-          return res.json({ success: false, error: 'Failed to enable service. Make sure systemd service is installed.' });
+      // Create the service file
+      const nodeExec = process.execPath;
+      const serverPath = path.join(__dirname, 'server.js');
+      
+      const serviceContent = `[Unit]
+Description=Hosted Proxy Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=${__dirname}
+ExecStart=${nodeExec} ${serverPath}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+`;
+      
+      fs.writeFileSync(serviceFile, serviceContent);
+      
+      // Enable and start the service using systemctl --user
+      exec('systemctl --user daemon-reload', (reloadError) => {
+        if (reloadError) {
+          console.error('Error reloading systemd:', reloadError);
+          return res.json({ success: false, error: 'Failed to reload systemd daemon.' });
         }
-        res.json({ success: true });
+        
+        exec('systemctl --user enable proxy-server.service', (enableError) => {
+          if (enableError) {
+            console.error('Error enabling service:', enableError);
+            return res.json({ success: false, error: 'Failed to enable service: ' + enableError.message });
+          }
+          
+          res.json({ success: true, message: 'Service enabled. It will start automatically on next login.' });
+        });
       });
     } else {
       // Disable the service
-      exec('sudo systemctl disable proxy-server.service', (error, stdout, stderr) => {
+      exec('systemctl --user disable proxy-server.service', (error, stdout, stderr) => {
         if (error) {
           console.error('Error disabling service:', error);
-          return res.json({ success: false, error: 'Failed to disable service. Make sure systemd service is installed.' });
+          return res.json({ success: false, error: 'Failed to disable service: ' + error.message });
         }
-        res.json({ success: true });
+        
+        // Optionally remove the service file
+        if (fs.existsSync(serviceFile)) {
+          fs.unlinkSync(serviceFile);
+        }
+        
+        exec('systemctl --user daemon-reload', () => {
+          res.json({ success: true, message: 'Service disabled successfully.' });
+        });
       });
     }
   } catch (error) {
