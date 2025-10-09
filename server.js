@@ -230,7 +230,7 @@ app.get('/', requireAuth, (req, res) => {
       ${app.icon ? (app.icon.startsWith('/uploads/') ? `<div class="app-icon"><img src="${app.icon}" alt="App icon" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px;"></div>` : `<div class="app-icon">${app.icon}</div>`) : ''}
       <h3>${app.name}</h3>
       <p>Port: ${app.port}</p>
-      <a href="${app.path}" class="btn">Access App</a>
+      <a href="/viewer?app=${encodeURIComponent(app.path)}" class="btn">Access App</a>
     </div>
   `).join('');
 
@@ -1351,6 +1351,129 @@ app.post('/api/upload-icon', requireAuth, upload.single('icon'), (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// App viewer page
+app.get('/viewer', requireAuth, (req, res) => {
+  const appPath = req.query.app;
+  
+  if (!appPath) {
+    return res.redirect('/');
+  }
+  
+  const app = config.apps.find(a => a.path === appPath);
+  
+  if (!app) {
+    return res.redirect('/');
+  }
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${app.name} - Proxy Server</title>
+      <style>
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: Arial, sans-serif;
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          background: #f5f5f5;
+          transition: background 0.3s ease;
+        }
+        body.dark-mode {
+          background: #1a1a2e;
+        }
+        .header {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 15px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 20px;
+        }
+        .header-buttons {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+        .btn {
+          padding: 8px 16px;
+          background: rgba(255,255,255,0.2);
+          color: white;
+          text-decoration: none;
+          border-radius: 5px;
+          border: 1px solid rgba(255,255,255,0.3);
+          transition: background 0.3s ease;
+        }
+        .btn:hover {
+          background: rgba(255,255,255,0.3);
+        }
+        .dark-mode-toggle {
+          background: rgba(255,255,255,0.2);
+          border: none;
+          border-radius: 50%;
+          width: 36px;
+          height: 36px;
+          cursor: pointer;
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.3s ease;
+          padding: 0;
+        }
+        .dark-mode-toggle:hover {
+          background: rgba(255,255,255,0.3);
+        }
+        .iframe-container {
+          flex: 1;
+          display: flex;
+          overflow: hidden;
+        }
+        iframe {
+          width: 100%;
+          height: 100%;
+          border: none;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>${app.name}</h1>
+        <div class="header-buttons">
+          <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">🌙</button>
+          <a href="/" class="btn">Back to Dashboard</a>
+        </div>
+      </div>
+      <div class="iframe-container">
+        <iframe src="${app.path}" title="${app.name}"></iframe>
+      </div>
+      <script>
+        // Dark mode functionality
+        function toggleDarkMode() {
+          document.body.classList.toggle('dark-mode');
+          const isDark = document.body.classList.contains('dark-mode');
+          localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+          document.querySelector('.dark-mode-toggle').textContent = isDark ? '☀️' : '🌙';
+        }
+        
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'enabled') {
+          document.body.classList.add('dark-mode');
+          document.querySelector('.dark-mode-toggle').textContent = '☀️';
+        }
+      </script>
+    </body>
+    </html>
+  `);
 });
 
 // Setup proxy for each app
