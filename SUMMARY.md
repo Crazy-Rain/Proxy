@@ -10,6 +10,14 @@ This document summarizes the implementation of the Hosted Proxy Server with auth
 - **Session Management**: Session-based authentication prevents unauthorized access
 - **Configurable Credentials**: Can be changed via web interface or config file
 
+### ✅ VNC Integration
+- **noVNC Client**: Built-in browser-based VNC client for accessing remote desktops
+- **WebSocket Support**: Direct WebSocket connections to VNC servers
+- **Auto-connect**: Viewer automatically attempts to connect on page load
+- **Interactive Controls**: Connect/Disconnect buttons and status feedback
+- **Viewport Scaling**: Automatic scaling to fit browser window
+- **Password Prompt**: Supports VNC authentication when required
+
 ### ✅ Run on Startup Toggle (Ubuntu Noble ARM64)
 - **Systemd Service**: Includes `proxy-server.service` file for systemd integration
 - **Web Toggle**: Settings page includes a toggle switch to enable/disable startup
@@ -19,7 +27,7 @@ This document summarizes the implementation of the Hosted Proxy Server with auth
 ### ✅ Main Dashboard
 - **App Listing**: Displays all configured applications from `config.json`
 - **App Information**: Shows app name and port for each entry
-- **Proxy Access**: Each app is accessible through a unique path (e.g., `/app1`, `/app2`)
+- **VNC Access**: Apps are accessed through integrated noVNC viewer
 - **Protected Access**: All apps require authentication through the proxy
 
 ### ✅ Settings Management
@@ -32,6 +40,8 @@ This document summarizes the implementation of the Hosted Proxy Server with auth
 
 - **Backend**: Node.js with Express
 - **Authentication**: express-session + bcrypt
+- **VNC Client**: noVNC (browser-based VNC viewer)
+- **WebSocket**: Socket.io for real-time communication
 - **Proxy**: http-proxy-middleware
 - **Configuration**: JSON file-based
 - **UI**: Server-side rendered HTML with embedded CSS and JavaScript
@@ -44,9 +54,12 @@ Proxy/
 ├── package.json              # Node.js dependencies
 ├── config.json              # Configuration (credentials, apps, settings)
 ├── proxy-server.service     # Systemd service file for Ubuntu
+├── novnc-core/              # noVNC core JavaScript modules
+├── novnc-vendor/            # noVNC vendor libraries (pako)
 ├── README.md                # Quick start guide
 ├── INSTALL.md               # Installation instructions
 ├── USAGE.md                 # Usage examples and documentation
+├── VNC_SETUP.md             # VNC server setup guide
 ├── .gitignore               # Excludes node_modules and logs
 └── LICENSE                  # GPL-2.0 License
 ```
@@ -60,19 +73,28 @@ Proxy/
 4. On successful login, creates session and redirects to dashboard
 5. Session persists until logout or server restart
 
-### 2. Proxy Functionality
+### 2. VNC Viewer Functionality
+- Viewer page replaced iframe with integrated noVNC client
+- Direct WebSocket connection to VNC servers on configured ports
+- Automatic connection on page load
+- Manual connect/disconnect controls
+- Password authentication support via credential prompt
+- Viewport scaling and session resizing enabled
+- Status bar for connection feedback
+
+### 3. Proxy Functionality (Legacy)
 - Each app in `config.json` gets a dedicated route
 - Requests to `/app1` are proxied to `localhost:8080`
 - Path rewriting ensures clean URL forwarding
 - All proxy routes require authentication
 
-### 3. Run on Startup
+### 4. Run on Startup
 - Service file located at `proxy-server.service`
 - Must be copied to `/etc/systemd/system/`
 - Paths in service file must be customized for installation
 - Toggle in web interface runs `systemctl enable/disable`
 
-### 4. Configuration Management
+### 5. Configuration Management
 ```json
 {
   "port": 3000,                    // Proxy server port
@@ -81,11 +103,11 @@ Proxy/
     "password": "<bcrypt-hash>"    // Bcrypt hashed password
   },
   "runOnStartup": false,           // Systemd enable state
-  "apps": [                        // List of proxied apps
+  "apps": [                        // List of VNC servers or proxied apps
     {
       "name": "App Name",          // Display name
-      "port": 8080,                // Localhost port
-      "path": "/app1"              // Proxy path
+      "port": 8080,                // VNC server or app port
+      "path": "/app1"              // Access path
     }
   ]
 }
@@ -114,13 +136,13 @@ Proxy/
 2. Add entry to `apps` array:
    ```json
    {
-     "name": "My App",
-     "port": 8000,
-     "path": "/myapp"
+     "name": "My VNC Server",
+     "port": 5900,
+     "path": "/vnc"
    }
    ```
 3. Restart server
-4. Access at `http://localhost:3000/myapp`
+4. Access at `http://localhost:3000/vnc` (connects to VNC server on port 5900)
 
 ### Enabling Startup Service (Ubuntu Noble ARM64)
 1. `sudo cp proxy-server.service /etc/systemd/system/`
@@ -135,6 +157,8 @@ All functionality has been tested and verified:
 - ✅ Login with correct credentials → Success
 - ✅ Login with incorrect credentials → Error message
 - ✅ Dashboard displays configured apps
+- ✅ VNC viewer page loads with noVNC client
+- ✅ Connect/Disconnect buttons work as expected
 - ✅ Settings page accessible
 - ✅ Password change persists to config.json
 - ✅ New password works for login
@@ -158,13 +182,22 @@ All functionality has been tested and verified:
 
 ```json
 {
-  "express": "^4.18.2",
-  "express-session": "^1.17.3",
-  "body-parser": "^1.20.2",
-  "http-proxy-middleware": "^2.0.6",
-  "bcrypt": "^5.1.1"
+  "express": "^4.21.2",
+  "express-session": "^1.18.1",
+  "body-parser": "^1.20.3",
+  "http-proxy-middleware": "^3.0.3",
+  "bcrypt": "^6.0.0",
+  "@novnc/novnc": "^1.6.0",
+  "websockify": "^0.11.0",
+  "socket.io": "^4.8.1",
+  "node-pty": "^1.0.0",
+  "multer": "^2.0.2",
+  "@xterm/xterm": "^5.5.0",
+  "@xterm/addon-fit": "^0.10.0"
 }
 ```
+
+Note: noVNC core files are included in the repository for offline functionality.
 
 ## Default Configuration
 
@@ -181,6 +214,7 @@ The implementation successfully meets all requirements:
 2. ✅ Run on Startup toggle for Ubuntu Noble ARM64
 3. ✅ Login system with configurable credentials
 4. ✅ Main page displaying available apps
-5. ✅ Proxy functionality for localhost:port apps
+5. ✅ VNC client integration for viewing remote desktops
+6. ✅ Browser-based noVNC viewer with WebSocket support
 
-The solution is production-ready with proper security measures, comprehensive documentation, and an intuitive user interface.
+The solution is production-ready with proper security measures, comprehensive documentation, VNC support, and an intuitive user interface.
