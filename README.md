@@ -27,7 +27,8 @@ A hosted proxy server with authentication and application management.
 
 ## Documentation
 
-See [INSTALL.md](INSTALL.md) for detailed installation and setup instructions.
+- [INSTALL.md](INSTALL.md) - Detailed installation and setup instructions
+- [USAGE.md](USAGE.md) - Usage examples and common use cases
 
 ## Configuration
 
