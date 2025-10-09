@@ -57,6 +57,8 @@ const upload = multer({
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/novnc-core', express.static(path.join(__dirname, 'novnc-core')));
+app.use('/vendor', express.static(path.join(__dirname, 'novnc-vendor')));
 app.use(session({
   secret: 'proxy-secret-key',
   resave: false,
@@ -1412,6 +1414,8 @@ app.get('/viewer', requireAuth, (req, res) => {
           border-radius: 5px;
           border: 1px solid rgba(255,255,255,0.3);
           transition: background 0.3s ease;
+          cursor: pointer;
+          font-size: 14px;
         }
         .btn:hover {
           background: rgba(255,255,255,0.3);
@@ -1433,15 +1437,37 @@ app.get('/viewer', requireAuth, (req, res) => {
         .dark-mode-toggle:hover {
           background: rgba(255,255,255,0.3);
         }
-        .iframe-container {
+        .vnc-container {
           flex: 1;
           display: flex;
           overflow: hidden;
+          position: relative;
+          background: #000;
         }
-        iframe {
-          width: 100%;
-          height: 100%;
-          border: none;
+        #vnc-screen {
+          flex: 1;
+        }
+        .status-bar {
+          position: absolute;
+          top: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(0,0,0,0.7);
+          color: white;
+          padding: 8px 16px;
+          border-radius: 5px;
+          font-size: 14px;
+          z-index: 1000;
+          display: none;
+        }
+        .status-bar.show {
+          display: block;
+        }
+        .status-bar.error {
+          background: rgba(220, 53, 69, 0.9);
+        }
+        .status-bar.success {
+          background: rgba(40, 167, 69, 0.9);
         }
       </style>
     </head>
@@ -1449,27 +1475,96 @@ app.get('/viewer', requireAuth, (req, res) => {
       <div class="header">
         <h1>${app.name}</h1>
         <div class="header-buttons">
+          <button class="btn" onclick="connectVNC()" id="connectBtn">Connect</button>
+          <button class="btn" onclick="disconnectVNC()" id="disconnectBtn" style="display:none;">Disconnect</button>
           <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">🌙</button>
           <a href="/" class="btn">Back to Dashboard</a>
         </div>
       </div>
-      <div class="iframe-container">
-        <iframe src="${app.path}" title="${app.name}"></iframe>
+      <div class="vnc-container">
+        <div id="status-bar" class="status-bar"></div>
+        <div id="vnc-screen"></div>
       </div>
-      <script>
+      <script type="module">
+        // Import noVNC RFB class from local core files
+        import RFB from '/novnc-core/rfb.js';
+
+        let rfb = null;
+        
+        window.connectVNC = function() {
+          const host = '${config.hostname || 'localhost'}';
+          const port = ${app.port};
+          const url = \`ws://\${host}:\${port}\`;
+          
+          showStatus('Connecting to VNC server...', 'info');
+          
+          try {
+            rfb = new RFB(document.getElementById('vnc-screen'), url);
+            
+            rfb.addEventListener('connect', () => {
+              showStatus('Connected successfully', 'success');
+              setTimeout(hideStatus, 2000);
+              document.getElementById('connectBtn').style.display = 'none';
+              document.getElementById('disconnectBtn').style.display = 'inline-block';
+            });
+            
+            rfb.addEventListener('disconnect', () => {
+              showStatus('Disconnected from VNC server', 'info');
+              rfb = null;
+              document.getElementById('connectBtn').style.display = 'inline-block';
+              document.getElementById('disconnectBtn').style.display = 'none';
+            });
+            
+            rfb.addEventListener('credentialsrequired', () => {
+              const password = prompt('VNC Password:');
+              if (password) {
+                rfb.sendCredentials({ password: password });
+              }
+            });
+            
+            rfb.scaleViewport = true;
+            rfb.resizeSession = true;
+          } catch (err) {
+            showStatus('Error: ' + err.message, 'error');
+            console.error('VNC connection error:', err);
+          }
+        };
+        
+        window.disconnectVNC = function() {
+          if (rfb) {
+            rfb.disconnect();
+          }
+        };
+        
+        function showStatus(message, type) {
+          const statusBar = document.getElementById('status-bar');
+          statusBar.textContent = message;
+          statusBar.className = 'status-bar show ' + type;
+        }
+        
+        function hideStatus() {
+          const statusBar = document.getElementById('status-bar');
+          statusBar.className = 'status-bar';
+        }
+        
         // Dark mode functionality
-        function toggleDarkMode() {
+        window.toggleDarkMode = function() {
           document.body.classList.toggle('dark-mode');
           const isDark = document.body.classList.contains('dark-mode');
           localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
           document.querySelector('.dark-mode-toggle').textContent = isDark ? '☀️' : '🌙';
-        }
+        };
         
         // Load dark mode preference
         if (localStorage.getItem('darkMode') === 'enabled') {
           document.body.classList.add('dark-mode');
           document.querySelector('.dark-mode-toggle').textContent = '☀️';
         }
+        
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+          connectVNC();
+        });
       </script>
     </body>
     </html>
@@ -1567,6 +1662,60 @@ io.on('connection', (socket) => {
     if (ptyProcess) {
       ptyProcess.kill();
       ptyProcess = null;
+    }
+  });
+});
+
+// VNC WebSocket proxy setup
+const net = require('net');
+
+io.of('/vnc').on('connection', (socket) => {
+  let vncSocket = null;
+
+  socket.on('vnc-connect', (data) => {
+    const { host, port } = data;
+    
+    // Validate host and port
+    if (!host || !port) {
+      socket.emit('vnc-error', { message: 'Invalid host or port' });
+      return;
+    }
+
+    // Connect to VNC server
+    vncSocket = net.createConnection(port, host);
+
+    vncSocket.on('connect', () => {
+      socket.emit('vnc-connected');
+    });
+
+    vncSocket.on('data', (data) => {
+      // Send VNC data to browser via WebSocket
+      socket.emit('vnc-data', Array.from(data));
+    });
+
+    vncSocket.on('error', (err) => {
+      socket.emit('vnc-error', { message: err.message });
+    });
+
+    vncSocket.on('close', () => {
+      socket.emit('vnc-disconnected');
+      if (vncSocket) {
+        vncSocket.destroy();
+        vncSocket = null;
+      }
+    });
+  });
+
+  socket.on('vnc-data', (data) => {
+    if (vncSocket && vncSocket.writable) {
+      vncSocket.write(Buffer.from(data));
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (vncSocket) {
+      vncSocket.destroy();
+      vncSocket = null;
     }
   });
 });
