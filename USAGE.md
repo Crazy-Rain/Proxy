@@ -240,6 +240,47 @@ Access apps running on different network devices:
 2. Add apps with their ports
 3. Access via proxy from any network device
 
+## Headless Operation
+
+### Accessing GUI Without a Monitor
+
+If you're running on a headless device (no physical monitor), you can still access graphical applications remotely. See [HEADLESS.md](HEADLESS.md) for comprehensive setup guides.
+
+#### Quick Example: Add Remote Desktop to Dashboard
+
+1. **Set up noVNC** (see HEADLESS.md for full instructions):
+```bash
+sudo apt install -y xvfb x11vnc
+git clone https://github.com/novnc/noVNC.git ~/noVNC
+```
+
+2. **Add to config.json**:
+```json
+{
+  "apps": [
+    {
+      "name": "Remote Desktop",
+      "port": 6080,
+      "path": "/desktop",
+      "icon": "🖥️"
+    }
+  ]
+}
+```
+
+3. **Start headless display**:
+```bash
+Xvfb :1 -screen 0 1920x1080x24 &
+export DISPLAY=:1
+startxfce4 &
+x11vnc -display :1 -nopw -forever &
+~/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+```
+
+4. **Access through proxy**: Visit `http://your-ip:3000`, login, and click "Remote Desktop"
+
+For more options including XPRA (faster), X11 forwarding (simpler), and Wayland setup, see [HEADLESS.md](HEADLESS.md).
+
 ## Security Notes
 
 - Always change the default password on first use
@@ -247,3 +288,4 @@ Access apps running on different network devices:
 - Consider using HTTPS in production (add reverse proxy like nginx)
 - The systemd service runs as a specific user (set in service file)
 - Sessions are stored in memory by default (restart clears sessions)
+- For headless displays, use authentication and SSH tunneling (see HEADLESS.md)

@@ -28,6 +28,7 @@ Visit: http://localhost:3000
 | `README.md` | Quick start guide |
 | `INSTALL.md` | Detailed installation instructions |
 | `USAGE.md` | Usage examples and common use cases |
+| `HEADLESS.md` | Remote display setup for headless operation |
 | `SUMMARY.md` | Technical implementation details |
 | `QUICKREF.md` | This quick reference |
 
@@ -132,3 +133,30 @@ sudo systemctl stop proxy-server.service
 - Verify current password is correct
 - Check new passwords match
 - Look for error message on page
+
+## Headless Display (No Monitor)
+
+Quick setup for remote GUI access on headless devices:
+
+```bash
+# Install required packages
+sudo apt install -y xvfb x11vnc
+git clone https://github.com/novnc/noVNC.git ~/noVNC
+
+# Start virtual display
+Xvfb :1 -screen 0 1920x1080x24 &
+export DISPLAY=:1
+
+# Start desktop (optional)
+startxfce4 &
+
+# Start VNC server
+x11vnc -display :1 -nopw -forever &
+
+# Start web-based VNC viewer
+~/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+```
+
+Access at `http://device-ip:6080/vnc.html`
+
+For more options (XPRA, X11 forwarding, etc.), see [HEADLESS.md](HEADLESS.md)

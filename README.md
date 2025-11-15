@@ -10,6 +10,7 @@ A hosted proxy server with authentication and application management.
 - **Run on Startup**: Toggle to enable/disable automatic startup (systemd user service, no sudo required)
 - **Configurable Credentials**: Change username and password from the web interface
 - **Configuration File**: Settings persisted in JSON format
+- **Headless Display Support**: Run and access graphical interfaces remotely without a monitor (see [HEADLESS.md](HEADLESS.md))
 
 ## Quick Start
 
@@ -31,6 +32,7 @@ A hosted proxy server with authentication and application management.
 
 - [INSTALL.md](INSTALL.md) - Detailed installation and setup instructions
 - [USAGE.md](USAGE.md) - Usage examples and common use cases
+- [HEADLESS.md](HEADLESS.md) - Remote display setup for headless operation (no monitor)
 
 ## Configuration
 
