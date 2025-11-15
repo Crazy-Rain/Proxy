@@ -30,6 +30,8 @@ Xvfb :1 -screen 0 1920x1080x24 &
 export DISPLAY=:1
 ```
 
+**Note**: The `&` at the end of shell commands runs them in the background. This is correct for manual shell commands but should NOT be used in systemd service files - systemd handles process management automatically.
+
 2. **Start your desktop environment (optional):**
 ```bash
 # Install a lightweight desktop if needed
@@ -40,6 +42,9 @@ startxfce4 &
 ```
 
 3. **Start x11vnc server:**
+
+**⚠️ Security Warning**: The example below uses `-nopw` (no password) for simplicity during initial setup. For production use, always add password authentication using `-rfbauth` or access through SSH tunneling. See the [Security Considerations](#security-considerations) section below.
+
 ```bash
 x11vnc -display :1 -nopw -listen 0.0.0.0 -xkb -forever -shared &
 ```
@@ -62,6 +67,10 @@ cd noVNC
 
 #### Create systemd service (autostart):
 
+**⚠️ Important**: Replace `yourusername` with your actual Linux username in the service file below.
+
+**Note**: Do NOT use `&` at the end of commands in systemd service files - systemd handles backgrounding automatically.
+
 Create `/etc/systemd/system/headless-display.service`:
 ```ini
 [Unit]
@@ -69,14 +78,10 @@ Description=Headless Display with noVNC
 After=network.target
 
 [Service]
-Type=forking
-User=root
+Type=simple
+User=yourusername
 Environment="DISPLAY=:1"
-ExecStartPre=/usr/bin/Xvfb :1 -screen 0 1920x1080x24
-ExecStartPre=/bin/sleep 2
-ExecStart=/usr/bin/x11vnc -display :1 -nopw -listen 0.0.0.0 -xkb -forever -shared -bg
-ExecStartPost=/bin/sleep 2
-ExecStartPost=/home/yourusername/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+ExecStart=/bin/bash -c 'Xvfb :1 -screen 0 1920x1080x24 & sleep 2; x11vnc -display :1 -nopw -listen 0.0.0.0 -xkb -forever -shared & sleep 2; /home/yourusername/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080'
 Restart=on-failure
 
 [Install]
@@ -161,6 +166,10 @@ sudo apt update
 sudo apt install -y xpra
 ```
 
+**Note**: If the PPA is not available or fails on ARM64, you can try:
+1. Installing from Ubuntu's default repositories: `sudo apt install xpra` (may be an older version)
+2. Building from source - see [XPRA documentation](https://github.com/Xpra-org/xpra/wiki) for ARM64-specific instructions
+
 #### Usage
 
 1. **Start XPRA server on Nanopi:**
@@ -200,6 +209,8 @@ http://nanopi-ip:10000/
 
 #### Create systemd service:
 
+**⚠️ Important**: Replace `yourusername` with your actual Linux username in the service file below.
+
 Create `/etc/systemd/system/xpra.service`:
 ```ini
 [Unit]
@@ -207,10 +218,10 @@ Description=XPRA Server
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 User=yourusername
 Environment="DISPLAY=:100"
-ExecStart=/usr/bin/xpra start :100 --bind-tcp=0.0.0.0:10000 --html=on --start=xfce4-session
+ExecStart=/usr/bin/xpra start :100 --bind-tcp=0.0.0.0:10000 --html=on --start=xfce4-session --daemon=no
 ExecStop=/usr/bin/xpra stop :100
 Restart=on-failure
 
@@ -228,6 +239,8 @@ WantedBy=multi-user.target
 For a modern Wayland-based setup that's lightweight and ARM-friendly.
 
 #### Installation
+
+**Note**: Verify package availability on your system first: `apt-cache search wayvnc`. On some ARM64 systems, wayvnc may need to be built from source.
 
 ```bash
 sudo apt install -y wayland weston wayvnc
@@ -374,6 +387,9 @@ Based on the device's ARM64 architecture and potential VNC issues, here's the re
 3. **Create systemd service** - automatic startup
 
 ### Commands Summary:
+
+**⚠️ Security Warning**: The quick test commands below use `-nopw` (no password) for simplicity. For production use, always add password authentication or use SSH tunneling. See the [Security Considerations](#security-considerations) section.
+
 ```bash
 # Quick test
 sudo apt install -y xvfb x11vnc

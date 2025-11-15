@@ -1,3 +1,16 @@
+# WARNING: This file is for CI/CD testing only. DO NOT USE directly for manual installation.
+# 
+# For production use:
+# 1. Use the web interface Settings > "Run on Startup" toggle (RECOMMENDED)
+#    - This automatically creates a user-level systemd service at ~/.config/systemd/user/proxy-server.service
+#    - No sudo required, runs as your user
+# 
+# 2. OR manually create a user service:
+#    systemctl --user edit --force --full proxy-server.service
+#    Then add your paths and configuration
+#
+# The paths below are GitHub Actions CI/CD paths and will NOT work on your system.
+
 [Unit]
 Description=Hosted Proxy Server
 After=network.target

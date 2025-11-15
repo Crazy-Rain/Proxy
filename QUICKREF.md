@@ -18,7 +18,7 @@ Visit: http://localhost:3000
 | `server.js` | Main application server |
 | `package.json` | Node.js dependencies |
 | `config.json` | Configuration (credentials, apps, settings) |
-| `proxy-server.service` | Systemd service for Ubuntu Noble ARM64 |
+| `proxy-server.service` | Systemd service (CI/CD only - use web UI instead) |
 | `.gitignore` | Excludes node_modules and logs from git |
 
 ## Documentation Files
@@ -68,26 +68,21 @@ Edit `config.json`:
 
 Then restart: `npm start`
 
-## Systemd Service (Ubuntu Noble ARM64)
+## Systemd Service (Run on Startup)
 
-1. Copy service:
-   ```bash
-   sudo cp proxy-server.service /etc/systemd/system/
-   ```
+**RECOMMENDED**: Use the web interface Settings > "Run on Startup" toggle
 
-2. Edit paths in service file:
-   ```bash
-   sudo nano /etc/systemd/system/proxy-server.service
-   ```
+This automatically creates a user-level service (no sudo required):
+```bash
+# Check status
+systemctl --user status proxy-server.service
 
-3. Reload and enable:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable proxy-server.service
-   sudo systemctl start proxy-server.service
-   ```
+# Or manually manage (if needed)
+systemctl --user enable proxy-server.service
+systemctl --user start proxy-server.service
+```
 
-4. Or use the toggle in Settings page
+**Note**: The `proxy-server.service` file in this repo is for CI/CD only and should NOT be used directly.
 
 ## Generate Password Hash
 
