@@ -18,7 +18,7 @@ Visit: http://localhost:3000
 | `server.js` | Main application server |
 | `package.json` | Node.js dependencies |
 | `config.json` | Configuration (credentials, apps, settings) |
-| `proxy-server.service` | Systemd service for Ubuntu Noble ARM64 |
+| `proxy-server.service` | Systemd service (CI/CD only - use web UI instead) |
 | `.gitignore` | Excludes node_modules and logs from git |
 
 ## Documentation Files
@@ -28,6 +28,7 @@ Visit: http://localhost:3000
 | `README.md` | Quick start guide |
 | `INSTALL.md` | Detailed installation instructions |
 | `USAGE.md` | Usage examples and common use cases |
+| `HEADLESS.md` | Remote display setup for headless operation |
 | `SUMMARY.md` | Technical implementation details |
 | `QUICKREF.md` | This quick reference |
 
@@ -67,26 +68,21 @@ Edit `config.json`:
 
 Then restart: `npm start`
 
-## Systemd Service (Ubuntu Noble ARM64)
+## Systemd Service (Run on Startup)
 
-1. Copy service:
-   ```bash
-   sudo cp proxy-server.service /etc/systemd/system/
-   ```
+**RECOMMENDED**: Use the web interface Settings > "Run on Startup" toggle
 
-2. Edit paths in service file:
-   ```bash
-   sudo nano /etc/systemd/system/proxy-server.service
-   ```
+This automatically creates a user-level service (no sudo required):
+```bash
+# Check status
+systemctl --user status proxy-server.service
 
-3. Reload and enable:
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable proxy-server.service
-   sudo systemctl start proxy-server.service
-   ```
+# Or manually manage (if needed)
+systemctl --user enable proxy-server.service
+systemctl --user start proxy-server.service
+```
 
-4. Or use the toggle in Settings page
+**Note**: The `proxy-server.service` file in this repo is for CI/CD only and should NOT be used directly.
 
 ## Generate Password Hash
 
@@ -132,3 +128,30 @@ sudo systemctl stop proxy-server.service
 - Verify current password is correct
 - Check new passwords match
 - Look for error message on page
+
+## Headless Display (No Monitor)
+
+Quick setup for remote GUI access on headless devices:
+
+```bash
+# Install required packages
+sudo apt install -y xvfb x11vnc
+git clone https://github.com/novnc/noVNC.git ~/noVNC
+
+# Start virtual display
+Xvfb :1 -screen 0 1920x1080x24 &
+export DISPLAY=:1
+
+# Start desktop (optional)
+startxfce4 &
+
+# Start VNC server
+x11vnc -display :1 -nopw -forever &
+
+# Start web-based VNC viewer
+~/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 &
+```
+
+Access at `http://device-ip:6080/vnc.html`
+
+For more options (XPRA, X11 forwarding, etc.), see [HEADLESS.md](HEADLESS.md)

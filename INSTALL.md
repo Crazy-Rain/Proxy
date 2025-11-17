@@ -110,6 +110,17 @@ The proxy server listens on `0.0.0.0:3000`, allowing access from:
 - Other devices on the network: `http://<server-ip>:3000`
 - By hostname: `http://<hostname>:3000`
 
+## Headless Operation (No Monitor)
+
+If you're running on a device without a monitor (like a Nanopi R76S) and need to access graphical applications remotely, see [HEADLESS.md](HEADLESS.md) for detailed setup instructions including:
+
+- noVNC (browser-based VNC)
+- X11 forwarding over SSH
+- XPRA (modern alternative with HTML5 support)
+- Wayland/Wayvnc setup
+
+These solutions allow you to view and control the graphical interface entirely remotely without needing a physical display.
+
 ## Security Notes
 
 - Always change the default password after first login
