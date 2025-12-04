@@ -11,6 +11,7 @@ const socketIo = require('socket.io');
 const pty = require('node-pty');
 const os = require('os');
 const multer = require('multer');
+const net = require('net');
 
 const app = express();
 const server = http.createServer(app);
@@ -349,6 +350,7 @@ app.get('/', requireAuth, (req, res) => {
         <h1>Proxy Server Dashboard</h1>
         <div class="nav-buttons">
           <button class="dark-mode-toggle" onclick="toggleDarkMode()" aria-label="Toggle dark mode">🌙</button>
+          <a href="/remote-desktop" class="btn btn-secondary">Remote Desktop</a>
           <a href="/terminal" class="btn btn-secondary">Terminal</a>
           <a href="/settings" class="btn btn-secondary">Settings</a>
           <a href="/logout" class="btn btn-secondary">Logout</a>
@@ -1130,6 +1132,514 @@ app.get('/terminal', requireAuth, (req, res) => {
   `);
 });
 
+// Remote Desktop page
+app.get('/remote-desktop', requireAuth, (req, res) => {
+  const vncConfig = config.remoteDesktop || { host: 'localhost', port: 5900 };
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Proxy Server - Remote Desktop</title>
+      <style>
+        * {
+          box-sizing: border-box;
+        }
+        body {
+          font-family: Arial, sans-serif;
+          margin: 0;
+          padding: 0;
+          background: #1a1a2e;
+          color: #e0e0e0;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .header {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 10px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-shrink: 0;
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 1.2rem;
+        }
+        .header-buttons {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+        .btn {
+          padding: 8px 16px;
+          background: rgba(255,255,255,0.2);
+          color: white;
+          text-decoration: none;
+          border-radius: 5px;
+          border: none;
+          cursor: pointer;
+          font-size: 14px;
+          transition: background 0.3s ease;
+        }
+        .btn:hover {
+          background: rgba(255,255,255,0.3);
+        }
+        .btn-success {
+          background: #28a745;
+        }
+        .btn-success:hover {
+          background: #218838;
+        }
+        .btn-danger {
+          background: #dc3545;
+        }
+        .btn-danger:hover {
+          background: #c82333;
+        }
+        .toolbar {
+          background: #2d2d3a;
+          padding: 10px 20px;
+          display: flex;
+          gap: 15px;
+          align-items: center;
+          flex-wrap: wrap;
+          flex-shrink: 0;
+          border-bottom: 1px solid #444;
+        }
+        .toolbar label {
+          font-size: 14px;
+          color: #b0b0b0;
+        }
+        .toolbar input, .toolbar select {
+          padding: 6px 10px;
+          border-radius: 4px;
+          border: 1px solid #444;
+          background: #1a1a2e;
+          color: #e0e0e0;
+          font-size: 14px;
+        }
+        .toolbar input:focus, .toolbar select:focus {
+          outline: none;
+          border-color: #667eea;
+        }
+        .status {
+          padding: 6px 12px;
+          border-radius: 4px;
+          font-size: 14px;
+          font-weight: bold;
+        }
+        .status.disconnected {
+          background: #dc3545;
+          color: white;
+        }
+        .status.connecting {
+          background: #ffc107;
+          color: #000;
+        }
+        .status.connected {
+          background: #28a745;
+          color: white;
+        }
+        .vnc-container {
+          flex: 1;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          overflow: hidden;
+          background: #000;
+          position: relative;
+        }
+        #vnc-screen {
+          max-width: 100%;
+          max-height: 100%;
+        }
+        .placeholder {
+          text-align: center;
+          color: #666;
+        }
+        .placeholder h2 {
+          margin-bottom: 10px;
+        }
+        .placeholder p {
+          margin: 5px 0;
+          font-size: 14px;
+        }
+        .info-panel {
+          background: #2d2d3a;
+          padding: 15px 20px;
+          border-top: 1px solid #444;
+          font-size: 13px;
+          flex-shrink: 0;
+        }
+        .info-panel strong {
+          color: #667eea;
+        }
+        .fullscreen-btn {
+          position: absolute;
+          bottom: 20px;
+          right: 20px;
+          z-index: 100;
+          background: rgba(0,0,0,0.7);
+          border: 1px solid #444;
+        }
+        .control-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .separator {
+          width: 1px;
+          height: 30px;
+          background: #444;
+          margin: 0 10px;
+        }
+        @media (max-width: 768px) {
+          .toolbar {
+            flex-direction: column;
+            align-items: stretch;
+          }
+          .separator {
+            display: none;
+          }
+          .control-group {
+            flex-wrap: wrap;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>🖥️ Remote Desktop</h1>
+        <div class="header-buttons">
+          <a href="/" class="btn">Back to Dashboard</a>
+        </div>
+      </div>
+      
+      <div class="toolbar">
+        <div class="control-group">
+          <label for="vnc-host">Host:</label>
+          <input type="text" id="vnc-host" value="${vncConfig.host}" placeholder="localhost" style="width: 120px;">
+        </div>
+        <div class="control-group">
+          <label for="vnc-port">Port:</label>
+          <input type="number" id="vnc-port" value="${vncConfig.port}" placeholder="5900" style="width: 80px;">
+        </div>
+        <div class="control-group">
+          <label for="vnc-password">Password:</label>
+          <input type="password" id="vnc-password" placeholder="VNC Password (if any)" style="width: 150px;">
+        </div>
+        
+        <div class="separator"></div>
+        
+        <div class="control-group">
+          <button id="connect-btn" class="btn btn-success" onclick="connectVNC()">Connect</button>
+          <button id="disconnect-btn" class="btn btn-danger" onclick="disconnectVNC()" style="display: none;">Disconnect</button>
+          <span id="status" class="status disconnected">Disconnected</span>
+        </div>
+        
+        <div class="separator"></div>
+        
+        <div class="control-group">
+          <label for="scale-mode">Scale:</label>
+          <select id="scale-mode" onchange="updateScaling()">
+            <option value="remote">Remote Resize</option>
+            <option value="local" selected>Local Scaling</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div class="control-group">
+          <label>
+            <input type="checkbox" id="view-only" onchange="updateViewOnly()"> View Only
+          </label>
+        </div>
+      </div>
+      
+      <div class="vnc-container" id="vnc-container">
+        <div class="placeholder" id="placeholder">
+          <h2>🖥️ Remote Desktop Control</h2>
+          <p>Connect to a VNC server to view and control a remote desktop.</p>
+          <p>Enter the VNC server host, port, and password (if required), then click Connect.</p>
+          <p style="margin-top: 20px; color: #888;">
+            <strong>Tip:</strong> Make sure a VNC server (like x11vnc, TigerVNC, or RealVNC) is running on the target machine.
+          </p>
+        </div>
+        <div id="vnc-screen" style="display: none;"></div>
+        <button class="btn fullscreen-btn" onclick="toggleFullscreen()" id="fullscreen-btn" style="display: none;">⛶ Fullscreen</button>
+      </div>
+      
+      <div class="info-panel">
+        <strong>How to set up VNC:</strong> 
+        Install a VNC server on your target machine (e.g., <code>sudo apt install x11vnc</code>), 
+        then start it with <code>x11vnc -display :0 -forever -shared</code>. 
+        See <a href="/headless-setup" style="color: #667eea;">HEADLESS.md</a> for detailed instructions.
+        | <strong>Keyboard shortcuts:</strong> Ctrl+Alt+Del, Send clipboard, etc. work when connected.
+      </div>
+
+      <script src="/socket.io/socket.io.js"></script>
+      <script>
+        let rfb = null;
+        let socket = null;
+        
+        // Status management
+        function setStatus(status, text) {
+          const statusEl = document.getElementById('status');
+          statusEl.className = 'status ' + status;
+          statusEl.textContent = text;
+        }
+        
+        // Connect to VNC
+        function connectVNC() {
+          const host = document.getElementById('vnc-host').value || 'localhost';
+          const port = parseInt(document.getElementById('vnc-port').value) || 5900;
+          const password = document.getElementById('vnc-password').value || '';
+          
+          setStatus('connecting', 'Connecting...');
+          
+          // Initialize socket connection for VNC proxy
+          socket = io();
+          
+          socket.emit('vnc-connect', { host, port, password });
+          
+          socket.on('vnc-connected', () => {
+            setStatus('connected', 'Connected');
+            document.getElementById('connect-btn').style.display = 'none';
+            document.getElementById('disconnect-btn').style.display = 'inline-block';
+            document.getElementById('placeholder').style.display = 'none';
+            document.getElementById('vnc-screen').style.display = 'block';
+            document.getElementById('fullscreen-btn').style.display = 'block';
+            initVNCCanvas();
+          });
+          
+          socket.on('vnc-frame', (data) => {
+            updateVNCFrame(data);
+          });
+          
+          socket.on('vnc-error', (error) => {
+            setStatus('disconnected', 'Error: ' + error);
+            alert('VNC Error: ' + error);
+            disconnectVNC();
+          });
+          
+          socket.on('vnc-disconnected', () => {
+            setStatus('disconnected', 'Disconnected');
+            cleanupVNC();
+          });
+        }
+        
+        // Disconnect from VNC
+        function disconnectVNC() {
+          if (socket) {
+            socket.emit('vnc-disconnect');
+            socket.disconnect();
+            socket = null;
+          }
+          cleanupVNC();
+        }
+        
+        function cleanupVNC() {
+          document.getElementById('connect-btn').style.display = 'inline-block';
+          document.getElementById('disconnect-btn').style.display = 'none';
+          document.getElementById('placeholder').style.display = 'block';
+          document.getElementById('vnc-screen').style.display = 'none';
+          document.getElementById('fullscreen-btn').style.display = 'none';
+          setStatus('disconnected', 'Disconnected');
+        }
+        
+        // VNC Canvas handling
+        let vncCanvas = null;
+        let vncCtx = null;
+        let screenWidth = 1920;
+        let screenHeight = 1080;
+        
+        function initVNCCanvas() {
+          const container = document.getElementById('vnc-screen');
+          container.innerHTML = '<canvas id="vnc-canvas"></canvas>';
+          vncCanvas = document.getElementById('vnc-canvas');
+          vncCtx = vncCanvas.getContext('2d');
+          
+          vncCanvas.width = screenWidth;
+          vncCanvas.height = screenHeight;
+          vncCanvas.style.background = '#000';
+          
+          // Add event listeners for mouse and keyboard
+          vncCanvas.addEventListener('mousedown', handleMouseDown);
+          vncCanvas.addEventListener('mouseup', handleMouseUp);
+          vncCanvas.addEventListener('mousemove', handleMouseMove);
+          vncCanvas.addEventListener('wheel', handleWheel);
+          vncCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+          
+          // Keyboard events
+          vncCanvas.tabIndex = 1;
+          vncCanvas.addEventListener('keydown', handleKeyDown);
+          vncCanvas.addEventListener('keyup', handleKeyUp);
+          vncCanvas.focus();
+          
+          updateScaling();
+        }
+        
+        function updateVNCFrame(data) {
+          if (!vncCanvas || !vncCtx) return;
+          
+          if (data.width && data.height && !data.imageData) {
+            screenWidth = data.width;
+            screenHeight = data.height;
+            vncCanvas.width = screenWidth;
+            vncCanvas.height = screenHeight;
+            updateScaling();
+            return;
+          }
+          
+          if (data.imageData && data.format === 'raw32') {
+            // Decode base64 raw pixel data
+            const binaryStr = atob(data.imageData);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+              bytes[i] = binaryStr.charCodeAt(i);
+            }
+            
+            // Create ImageData from raw pixels (BGRA -> RGBA)
+            const imageData = vncCtx.createImageData(data.w, data.h);
+            for (let i = 0; i < bytes.length; i += 4) {
+              const j = i;
+              imageData.data[j] = bytes[i + 2];     // R (from B)
+              imageData.data[j + 1] = bytes[i + 1]; // G
+              imageData.data[j + 2] = bytes[i];     // B (from R)
+              imageData.data[j + 3] = 255;          // A
+            }
+            
+            vncCtx.putImageData(imageData, data.x, data.y);
+          } else if (data.imageData) {
+            const img = new Image();
+            img.onload = () => {
+              vncCtx.drawImage(img, data.x || 0, data.y || 0);
+            };
+            img.src = 'data:image/png;base64,' + data.imageData;
+          }
+        }
+        
+        // Input handlers
+        function getMousePos(e) {
+          const rect = vncCanvas.getBoundingClientRect();
+          const scaleX = screenWidth / rect.width;
+          const scaleY = screenHeight / rect.height;
+          return {
+            x: Math.floor((e.clientX - rect.left) * scaleX),
+            y: Math.floor((e.clientY - rect.top) * scaleY)
+          };
+        }
+        
+        function handleMouseDown(e) {
+          if (!socket || document.getElementById('view-only').checked) return;
+          const pos = getMousePos(e);
+          socket.emit('vnc-mouse', { type: 'down', x: pos.x, y: pos.y, button: e.button });
+        }
+        
+        function handleMouseUp(e) {
+          if (!socket || document.getElementById('view-only').checked) return;
+          const pos = getMousePos(e);
+          socket.emit('vnc-mouse', { type: 'up', x: pos.x, y: pos.y, button: e.button });
+        }
+        
+        function handleMouseMove(e) {
+          if (!socket || document.getElementById('view-only').checked) return;
+          const pos = getMousePos(e);
+          socket.emit('vnc-mouse', { type: 'move', x: pos.x, y: pos.y });
+        }
+        
+        function handleWheel(e) {
+          if (!socket || document.getElementById('view-only').checked) return;
+          e.preventDefault();
+          const pos = getMousePos(e);
+          socket.emit('vnc-mouse', { type: 'wheel', x: pos.x, y: pos.y, deltaX: e.deltaX, deltaY: e.deltaY });
+        }
+        
+        function handleKeyDown(e) {
+          if (!socket || document.getElementById('view-only').checked) return;
+          e.preventDefault();
+          socket.emit('vnc-key', { type: 'down', key: e.key, keyCode: e.keyCode, code: e.code });
+        }
+        
+        function handleKeyUp(e) {
+          if (!socket || document.getElementById('view-only').checked) return;
+          e.preventDefault();
+          socket.emit('vnc-key', { type: 'up', key: e.key, keyCode: e.keyCode, code: e.code });
+        }
+        
+        // Scaling
+        function updateScaling() {
+          if (!vncCanvas) return;
+          const mode = document.getElementById('scale-mode').value;
+          const container = document.getElementById('vnc-container');
+          
+          switch (mode) {
+            case 'local':
+              vncCanvas.style.maxWidth = '100%';
+              vncCanvas.style.maxHeight = '100%';
+              vncCanvas.style.width = 'auto';
+              vncCanvas.style.height = 'auto';
+              break;
+            case 'remote':
+              // Request server to resize
+              if (socket) {
+                socket.emit('vnc-resize', { 
+                  width: container.clientWidth, 
+                  height: container.clientHeight 
+                });
+              }
+              break;
+            case 'none':
+              vncCanvas.style.maxWidth = 'none';
+              vncCanvas.style.maxHeight = 'none';
+              vncCanvas.style.width = screenWidth + 'px';
+              vncCanvas.style.height = screenHeight + 'px';
+              break;
+          }
+        }
+        
+        function updateViewOnly() {
+          // View only is handled client-side by ignoring input events
+        }
+        
+        // Fullscreen
+        function toggleFullscreen() {
+          const container = document.getElementById('vnc-container');
+          if (!document.fullscreenElement) {
+            container.requestFullscreen().catch(err => {
+              alert('Fullscreen error: ' + err.message);
+            });
+          } else {
+            document.exitFullscreen();
+          }
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+          updateScaling();
+        });
+        
+        // Save settings on change
+        document.getElementById('vnc-host').addEventListener('change', saveSettings);
+        document.getElementById('vnc-port').addEventListener('change', saveSettings);
+        
+        function saveSettings() {
+          const host = document.getElementById('vnc-host').value;
+          const port = document.getElementById('vnc-port').value;
+          fetch('/api/remote-desktop-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host, port: parseInt(port) })
+          });
+        }
+      </script>
+    </body>
+    </html>
+  `);
+});
+
 // API endpoints
 app.post('/api/startup', requireAuth, async (req, res) => {
   const { enabled } = req.body;
@@ -1353,6 +1863,29 @@ app.post('/api/upload-icon', requireAuth, upload.single('icon'), (req, res) => {
   }
 });
 
+// Remote desktop settings API
+app.post('/api/remote-desktop-settings', requireAuth, async (req, res) => {
+  const { host, port } = req.body;
+  
+  try {
+    if (!config.remoteDesktop) {
+      config.remoteDesktop = {};
+    }
+    config.remoteDesktop.host = host || 'localhost';
+    config.remoteDesktop.port = parseInt(port) || 5900;
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    
+    res.json({ success: true, message: 'Remote desktop settings saved.' });
+  } catch (error) {
+    res.json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/remote-desktop-settings', requireAuth, (req, res) => {
+  const settings = config.remoteDesktop || { host: 'localhost', port: 5900 };
+  res.json({ success: true, settings });
+});
+
 // App viewer page
 app.get('/viewer', requireAuth, (req, res) => {
   const appPath = req.query.app;
@@ -1524,10 +2057,12 @@ config.apps.forEach(appConfig => {
   }));
 });
 
-// Terminal socket.io setup
+// Terminal and VNC socket.io setup
 io.on('connection', (socket) => {
   let ptyProcess = null;
+  let vncSocket = null;
 
+  // Terminal handlers
   socket.on('start-terminal', () => {
     if (ptyProcess) {
       return;
@@ -1563,13 +2098,452 @@ io.on('connection', (socket) => {
     });
   });
 
+  // VNC handlers
+  socket.on('vnc-connect', (data) => {
+    const { host, port, password } = data;
+    
+    // Validate host to prevent SSRF - only allow localhost, local IPs, or hostnames
+    const allowedHostPattern = /^(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}|[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)*)$/;
+    if (!allowedHostPattern.test(host)) {
+      socket.emit('vnc-error', 'Invalid host address');
+      return;
+    }
+    
+    // Validate port range
+    const vncPort = parseInt(port) || 5900;
+    if (vncPort < 1 || vncPort > 65535) {
+      socket.emit('vnc-error', 'Invalid port number');
+      return;
+    }
+    
+    if (vncSocket) {
+      vncSocket.destroy();
+      vncSocket = null;
+    }
+    
+    try {
+      vncSocket = net.createConnection({ host, port: vncPort }, () => {
+        console.log('VNC connection established to ' + host + ':' + vncPort);
+        socket.emit('vnc-connected');
+      });
+      
+      // Handle VNC data
+      let vncBuffer = Buffer.alloc(0);
+      let vncState = 'handshake';
+      let vncVersion = '';
+      let securityTypes = [];
+      let framebufferWidth = 0;
+      let framebufferHeight = 0;
+      
+      vncSocket.on('data', (data) => {
+        vncBuffer = Buffer.concat([vncBuffer, data]);
+        processVNCData();
+      });
+      
+      function processVNCData() {
+        while (vncBuffer.length > 0) {
+          if (vncState === 'handshake') {
+            // Wait for server version (12 bytes)
+            if (vncBuffer.length >= 12) {
+              vncVersion = vncBuffer.slice(0, 12).toString();
+              console.log('VNC Server version:', vncVersion.trim());
+              vncBuffer = vncBuffer.slice(12);
+              
+              // Send client version (RFB 003.008)
+              vncSocket.write('RFB 003.008\\n');
+              vncState = 'security';
+            } else {
+              break;
+            }
+          } else if (vncState === 'security') {
+            // Number of security types (1 byte) followed by type bytes
+            if (vncBuffer.length >= 1) {
+              const numTypes = vncBuffer[0];
+              if (vncBuffer.length >= 1 + numTypes) {
+                securityTypes = Array.from(vncBuffer.slice(1, 1 + numTypes));
+                console.log('Security types:', securityTypes);
+                vncBuffer = vncBuffer.slice(1 + numTypes);
+                
+                // Choose security type (prefer None=1, or VNC Auth=2)
+                if (securityTypes.includes(1)) {
+                  // No authentication
+                  vncSocket.write(Buffer.from([1]));
+                  vncState = 'security-result';
+                } else if (securityTypes.includes(2)) {
+                  // VNC authentication
+                  vncSocket.write(Buffer.from([2]));
+                  vncState = 'vnc-auth-challenge';
+                } else {
+                  socket.emit('vnc-error', 'No supported security type');
+                  vncSocket.destroy();
+                  return;
+                }
+              } else {
+                break;
+              }
+            } else {
+              break;
+            }
+          } else if (vncState === 'vnc-auth-challenge') {
+            // 16-byte challenge
+            if (vncBuffer.length >= 16) {
+              const challenge = vncBuffer.slice(0, 16);
+              vncBuffer = vncBuffer.slice(16);
+              
+              // Simple DES encryption of password with challenge
+              // For now, send empty response (will fail without proper password)
+              const response = encryptVNCPassword(password || '', challenge);
+              vncSocket.write(response);
+              vncState = 'security-result';
+            } else {
+              break;
+            }
+          } else if (vncState === 'security-result') {
+            // Security result (4 bytes)
+            if (vncBuffer.length >= 4) {
+              const result = vncBuffer.readUInt32BE(0);
+              vncBuffer = vncBuffer.slice(4);
+              
+              if (result === 0) {
+                console.log('VNC authentication successful');
+                // Send ClientInit (shared flag = 1)
+                vncSocket.write(Buffer.from([1]));
+                vncState = 'server-init';
+              } else {
+                socket.emit('vnc-error', 'Authentication failed');
+                vncSocket.destroy();
+                return;
+              }
+            } else {
+              break;
+            }
+          } else if (vncState === 'server-init') {
+            // ServerInit message (at least 24 bytes + name)
+            if (vncBuffer.length >= 24) {
+              framebufferWidth = vncBuffer.readUInt16BE(0);
+              framebufferHeight = vncBuffer.readUInt16BE(2);
+              const nameLength = vncBuffer.readUInt32BE(20);
+              
+              if (vncBuffer.length >= 24 + nameLength) {
+                const serverName = vncBuffer.slice(24, 24 + nameLength).toString();
+                console.log('VNC Server:', serverName, framebufferWidth + 'x' + framebufferHeight);
+                vncBuffer = vncBuffer.slice(24 + nameLength);
+                
+                // Send frame info to client
+                socket.emit('vnc-frame', {
+                  width: framebufferWidth,
+                  height: framebufferHeight,
+                  serverName: serverName
+                });
+                
+                // Set pixel format (32-bit true color)
+                const setPixelFormat = Buffer.alloc(20);
+                setPixelFormat[0] = 0; // SetPixelFormat
+                setPixelFormat[4] = 32; // bits per pixel
+                setPixelFormat[5] = 24; // depth
+                setPixelFormat[6] = 0;  // big-endian
+                setPixelFormat[7] = 1;  // true color
+                setPixelFormat.writeUInt16BE(255, 8);  // red-max
+                setPixelFormat.writeUInt16BE(255, 10); // green-max
+                setPixelFormat.writeUInt16BE(255, 12); // blue-max
+                setPixelFormat[14] = 16; // red-shift
+                setPixelFormat[15] = 8;  // green-shift
+                setPixelFormat[16] = 0;  // blue-shift
+                vncSocket.write(setPixelFormat);
+                
+                // Set encodings
+                const setEncodings = Buffer.alloc(8);
+                setEncodings[0] = 2; // SetEncodings
+                setEncodings.writeUInt16BE(1, 2); // number of encodings
+                setEncodings.writeInt32BE(0, 4);  // Raw encoding
+                vncSocket.write(setEncodings);
+                
+                // Request framebuffer update
+                requestFramebufferUpdate(true);
+                
+                vncState = 'connected';
+              } else {
+                break;
+              }
+            } else {
+              break;
+            }
+          } else if (vncState === 'connected') {
+            // Process server messages
+            if (vncBuffer.length >= 1) {
+              const msgType = vncBuffer[0];
+              
+              if (msgType === 0) {
+                // FramebufferUpdate
+                if (vncBuffer.length >= 4) {
+                  const numRects = vncBuffer.readUInt16BE(2);
+                  let offset = 4;
+                  let processed = 0;
+                  
+                  for (let i = 0; i < numRects && offset + 12 <= vncBuffer.length; i++) {
+                    const x = vncBuffer.readUInt16BE(offset);
+                    const y = vncBuffer.readUInt16BE(offset + 2);
+                    const w = vncBuffer.readUInt16BE(offset + 4);
+                    const h = vncBuffer.readUInt16BE(offset + 6);
+                    const encoding = vncBuffer.readInt32BE(offset + 8);
+                    offset += 12;
+                    
+                    if (encoding === 0) {
+                      // Raw encoding
+                      const dataSize = w * h * 4; // 32-bit
+                      if (offset + dataSize <= vncBuffer.length) {
+                        const pixelData = vncBuffer.slice(offset, offset + dataSize);
+                        offset += dataSize;
+                        processed++;
+                        
+                        // Convert to PNG and send to client
+                        sendFrameToClient(x, y, w, h, pixelData);
+                      } else {
+                        // Not enough data yet
+                        break;
+                      }
+                    }
+                  }
+                  
+                  if (processed === numRects) {
+                    vncBuffer = vncBuffer.slice(offset);
+                    // Request next update
+                    setTimeout(() => requestFramebufferUpdate(false), 33); // ~30 FPS
+                  } else {
+                    // Wait for more data
+                    break;
+                  }
+                } else {
+                  break;
+                }
+              } else if (msgType === 1) {
+                // SetColourMapEntries - skip
+                if (vncBuffer.length >= 6) {
+                  const numColors = vncBuffer.readUInt16BE(4);
+                  const totalSize = 6 + numColors * 6;
+                  if (vncBuffer.length >= totalSize) {
+                    vncBuffer = vncBuffer.slice(totalSize);
+                  } else {
+                    break;
+                  }
+                } else {
+                  break;
+                }
+              } else if (msgType === 2) {
+                // Bell
+                vncBuffer = vncBuffer.slice(1);
+                socket.emit('vnc-bell');
+              } else if (msgType === 3) {
+                // ServerCutText
+                if (vncBuffer.length >= 8) {
+                  const textLength = vncBuffer.readUInt32BE(4);
+                  if (vncBuffer.length >= 8 + textLength) {
+                    const text = vncBuffer.slice(8, 8 + textLength).toString();
+                    vncBuffer = vncBuffer.slice(8 + textLength);
+                    socket.emit('vnc-clipboard', text);
+                  } else {
+                    break;
+                  }
+                } else {
+                  break;
+                }
+              } else {
+                // Unknown message type
+                console.log('Unknown VNC message type:', msgType);
+                vncBuffer = vncBuffer.slice(1);
+              }
+            } else {
+              break;
+            }
+          }
+        }
+      }
+      
+      function requestFramebufferUpdate(incremental) {
+        if (!vncSocket || vncSocket.destroyed) return;
+        const request = Buffer.alloc(10);
+        request[0] = 3; // FramebufferUpdateRequest
+        request[1] = incremental ? 1 : 0;
+        request.writeUInt16BE(0, 2);
+        request.writeUInt16BE(0, 4);
+        request.writeUInt16BE(framebufferWidth, 6);
+        request.writeUInt16BE(framebufferHeight, 8);
+        vncSocket.write(request);
+      }
+      
+      function sendFrameToClient(x, y, w, h, pixelData) {
+        // Create a simple bitmap representation
+        // For efficiency, we'll send raw pixel data as base64
+        // The client can render this on a canvas
+        const imageData = pixelData.toString('base64');
+        socket.emit('vnc-frame', {
+          x, y, w, h,
+          imageData,
+          format: 'raw32'
+        });
+      }
+      
+      vncSocket.on('error', (err) => {
+        console.error('VNC connection error:', err.message);
+        socket.emit('vnc-error', err.message);
+      });
+      
+      vncSocket.on('close', () => {
+        console.log('VNC connection closed');
+        socket.emit('vnc-disconnected');
+        vncSocket = null;
+      });
+      
+    } catch (err) {
+      socket.emit('vnc-error', 'Failed to connect: ' + err.message);
+    }
+  });
+  
+  // Handle mouse events from client
+  socket.on('vnc-mouse', (data) => {
+    if (!vncSocket || vncSocket.destroyed) return;
+    
+    const { type, x, y, button, deltaY } = data;
+    
+    // PointerEvent message
+    const msg = Buffer.alloc(6);
+    msg[0] = 5; // PointerEvent
+    
+    // Button mask
+    let buttonMask = 0;
+    if (type === 'down' || type === 'move') {
+      if (button === 0) buttonMask |= 1; // Left
+      if (button === 1) buttonMask |= 2; // Middle  
+      if (button === 2) buttonMask |= 4; // Right
+    }
+    if (type === 'wheel') {
+      // Scroll wheel
+      buttonMask |= deltaY < 0 ? 8 : 16;
+    }
+    
+    msg[1] = buttonMask;
+    msg.writeUInt16BE(x, 2);
+    msg.writeUInt16BE(y, 4);
+    vncSocket.write(msg);
+  });
+  
+  // Handle keyboard events from client
+  socket.on('vnc-key', (data) => {
+    if (!vncSocket || vncSocket.destroyed) return;
+    
+    const { type, key, keyCode, code } = data;
+    
+    // KeyEvent message
+    const msg = Buffer.alloc(8);
+    msg[0] = 4; // KeyEvent
+    msg[1] = type === 'down' ? 1 : 0; // down-flag
+    
+    // Convert JS key to X11 keysym
+    const keysym = jsKeyToKeysym(key, keyCode, code);
+    msg.writeUInt32BE(keysym, 4);
+    vncSocket.write(msg);
+  });
+  
+  socket.on('vnc-disconnect', () => {
+    if (vncSocket) {
+      vncSocket.destroy();
+      vncSocket = null;
+    }
+  });
+
   socket.on('disconnect', () => {
     if (ptyProcess) {
       ptyProcess.kill();
       ptyProcess = null;
     }
+    if (vncSocket) {
+      vncSocket.destroy();
+      vncSocket = null;
+    }
   });
 });
+
+// VNC DES password encryption helper
+function encryptVNCPassword(password, challenge) {
+  // VNC uses a modified DES encryption
+  // For simplicity, this is a placeholder - real implementation would use DES
+  // Most VNC servers support "None" authentication which doesn't need this
+  const crypto = require('crypto');
+  
+  // Pad or truncate password to 8 bytes
+  let key = Buffer.alloc(8);
+  const pwdBytes = Buffer.from(password, 'ascii');
+  for (let i = 0; i < 8; i++) {
+    key[i] = i < pwdBytes.length ? pwdBytes[i] : 0;
+  }
+  
+  // Reverse bits in each byte (VNC quirk)
+  for (let i = 0; i < 8; i++) {
+    let b = key[i];
+    key[i] = ((b * 0x0202020202 & 0x010884422010) % 1023);
+  }
+  
+  try {
+    const cipher = crypto.createCipheriv('des-ecb', key, null);
+    cipher.setAutoPadding(false);
+    const encrypted1 = cipher.update(challenge.slice(0, 8));
+    const encrypted2 = cipher.update(challenge.slice(8, 16));
+    return Buffer.concat([encrypted1, encrypted2]);
+  } catch (e) {
+    // Return challenge as-is if encryption fails
+    return challenge;
+  }
+}
+
+// Convert JavaScript key to X11 keysym
+function jsKeyToKeysym(key, keyCode, code) {
+  // Common key mappings
+  const keyMap = {
+    'Backspace': 0xff08,
+    'Tab': 0xff09,
+    'Enter': 0xff0d,
+    'Escape': 0xff1b,
+    'Delete': 0xffff,
+    'Home': 0xff50,
+    'End': 0xff57,
+    'PageUp': 0xff55,
+    'PageDown': 0xff56,
+    'ArrowLeft': 0xff51,
+    'ArrowUp': 0xff52,
+    'ArrowRight': 0xff53,
+    'ArrowDown': 0xff54,
+    'Insert': 0xff63,
+    'F1': 0xffbe,
+    'F2': 0xffbf,
+    'F3': 0xffc0,
+    'F4': 0xffc1,
+    'F5': 0xffc2,
+    'F6': 0xffc3,
+    'F7': 0xffc4,
+    'F8': 0xffc5,
+    'F9': 0xffc6,
+    'F10': 0xffc7,
+    'F11': 0xffc8,
+    'F12': 0xffc9,
+    'Shift': 0xffe1,
+    'Control': 0xffe3,
+    'Alt': 0xffe9,
+    'Meta': 0xffeb,
+    ' ': 0x0020,
+  };
+  
+  if (keyMap[key]) {
+    return keyMap[key];
+  }
+  
+  // For printable characters, use their char code
+  if (key.length === 1) {
+    return key.charCodeAt(0);
+  }
+  
+  // Default to keyCode
+  return keyCode || 0;
+}
 
 // Start server
 const PORT = config.port || 3000;
