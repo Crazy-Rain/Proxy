@@ -12,6 +12,7 @@ const pty = require('node-pty');
 const os = require('os');
 const multer = require('multer');
 const net = require('net');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -1375,7 +1376,7 @@ app.get('/remote-desktop', requireAuth, (req, res) => {
         <strong>How to set up VNC:</strong> 
         Install a VNC server on your target machine (e.g., <code>sudo apt install x11vnc</code>), 
         then start it with <code>x11vnc -display :0 -forever -shared</code>. 
-        See <a href="/headless-setup" style="color: #667eea;">HEADLESS.md</a> for detailed instructions.
+        See <a href="https://github.com/Crazy-Rain/Proxy/blob/main/HEADLESS.md" target="_blank" style="color: #667eea;">HEADLESS.md</a> for detailed instructions.
         | <strong>Keyboard shortcuts:</strong> Ctrl+Alt+Del, Send clipboard, etc. work when connected.
       </div>
 
@@ -2102,10 +2103,45 @@ io.on('connection', (socket) => {
   socket.on('vnc-connect', (data) => {
     const { host, port, password } = data;
     
-    // Validate host to prevent SSRF - only allow localhost, local IPs, or hostnames
-    const allowedHostPattern = /^(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}|[a-zA-Z0-9][-a-zA-Z0-9]*(\.[a-zA-Z0-9][-a-zA-Z0-9]*)*)$/;
-    if (!allowedHostPattern.test(host)) {
-      socket.emit('vnc-error', 'Invalid host address');
+    // Validate host to prevent SSRF - only allow localhost and private network IPs
+    // This restricts connections to local/trusted networks only
+    function isValidPrivateHost(hostname) {
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return true;
+      }
+      
+      // Check for valid private IP ranges with proper octet validation (0-255)
+      const ipMatch = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+      if (!ipMatch) {
+        return false;
+      }
+      
+      const octets = ipMatch.slice(1).map(n => parseInt(n, 10));
+      
+      // Validate all octets are 0-255
+      if (octets.some(o => o < 0 || o > 255)) {
+        return false;
+      }
+      
+      const [a, b, c, d] = octets;
+      
+      // 10.0.0.0 - 10.255.255.255
+      if (a === 10) return true;
+      
+      // 172.16.0.0 - 172.31.255.255
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      
+      // 192.168.0.0 - 192.168.255.255
+      if (a === 192 && b === 168) return true;
+      
+      // 127.0.0.0 - 127.255.255.255 (loopback)
+      if (a === 127) return true;
+      
+      return false;
+    }
+    
+    if (!isValidPrivateHost(host)) {
+      socket.emit('vnc-error', 'Invalid host address. Only localhost and private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x) are allowed.');
       return;
     }
     
@@ -2150,7 +2186,7 @@ io.on('connection', (socket) => {
               vncBuffer = vncBuffer.slice(12);
               
               // Send client version (RFB 003.008)
-              vncSocket.write('RFB 003.008\\n');
+              vncSocket.write('RFB 003.008\n');
               vncState = 'security';
             } else {
               break;
@@ -2465,10 +2501,8 @@ io.on('connection', (socket) => {
 
 // VNC DES password encryption helper
 function encryptVNCPassword(password, challenge) {
-  // VNC uses a modified DES encryption
-  // For simplicity, this is a placeholder - real implementation would use DES
-  // Most VNC servers support "None" authentication which doesn't need this
-  const crypto = require('crypto');
+  // VNC uses a modified DES encryption with bit-reversed key bytes
+  // This is the standard VNC authentication method (security type 2)
   
   // Pad or truncate password to 8 bytes
   let key = Buffer.alloc(8);
@@ -2478,9 +2512,16 @@ function encryptVNCPassword(password, challenge) {
   }
   
   // Reverse bits in each byte (VNC quirk)
+  // VNC uses a non-standard DES key with reversed bit order
   for (let i = 0; i < 8; i++) {
     let b = key[i];
-    key[i] = ((b * 0x0202020202 & 0x010884422010) % 1023);
+    let reversed = 0;
+    for (let j = 0; j < 8; j++) {
+      if (b & (1 << j)) {
+        reversed |= (1 << (7 - j));
+      }
+    }
+    key[i] = reversed;
   }
   
   try {
