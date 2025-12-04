@@ -11,6 +11,7 @@ A hosted proxy server with authentication and application management.
 - **Configurable Credentials**: Change username and password from the web interface
 - **Configuration File**: Settings persisted in JSON format
 - **Headless Display Support**: Run and access graphical interfaces remotely without a monitor (see [HEADLESS.md](HEADLESS.md))
+- **Built-in Remote Desktop**: Full remote desktop control through VNC, accessible directly from the dashboard
 
 ## Quick Start
 
@@ -28,6 +29,36 @@ A hosted proxy server with authentication and application management.
    - Default username: `admin`
    - Default password: `admin`
 
+## Remote Desktop
+
+The proxy includes a built-in remote desktop feature that allows you to view and control remote desktops via VNC:
+
+1. Click the **Remote Desktop** button in the dashboard navigation
+2. Enter the VNC server host, port (default: 5900), and password (if required)
+3. Click **Connect** to establish the connection
+4. Use your mouse and keyboard to interact with the remote desktop
+
+**Features:**
+- Full mouse and keyboard control
+- Adjustable scaling (local scaling, remote resize, or no scaling)
+- View-only mode option
+- Fullscreen support
+- Works with any standard VNC server (x11vnc, TigerVNC, RealVNC, etc.)
+
+**Setting up a VNC server:**
+```bash
+# Install x11vnc
+sudo apt install x11vnc
+
+# Start VNC server (no password)
+x11vnc -display :0 -forever -shared
+
+# Or with password
+x11vnc -display :0 -forever -shared -rfbauth ~/.vnc/passwd
+```
+
+See [HEADLESS.md](HEADLESS.md) for detailed setup instructions for headless systems.
+
 ## Documentation
 
 - [INSTALL.md](INSTALL.md) - Detailed installation and setup instructions
@@ -41,6 +72,7 @@ The web interface provides:
 - App management (add/edit/delete applications)
 - Password and username changes
 - Startup service toggle
+- Remote desktop settings (VNC host/port)
 
 Or edit `config.json` directly to configure settings.
 
